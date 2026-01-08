@@ -401,6 +401,7 @@ std::shared_ptr<RuntimeStageData::Shader> Reflector::GenerateRuntimeStageData()
 
     for (size_t i = 0; i < members.size(); i += 1) {
       const auto& member = members[i];
+      FML_LOG(IMPORTANT) << member.name;
       std::vector<int> bytes;
       switch (member.underlying_type) {
         case StructMember::UnderlyingType::kPadding: {
