@@ -477,13 +477,65 @@ void main() async {
     shader.dispose();
   });
 
-  _runSkiaTest('FragmentShader shader with array uniforms renders correctly', () async {
+  _runImpellerTest('FragmentShader shader with array uniforms renders correctly', () async {
     final FragmentProgram program = await FragmentProgram.fromAsset('uniform_arrays.frag.iplr');
 
     final FragmentShader shader = program.fragmentShader();
     for (var i = 0; i < 20; i++) {
-      shader.setFloat(i, i.toDouble());
+      shader.setFloat(i, i.toDouble() + 1);
     }
+
+    await _expectShaderRendersGreen(shader);
+    shader.dispose();
+  });
+
+  _runImpellerTest('FragmentShader shader with mat2 renders correctly slot 0', () async {
+    final FragmentProgram program = await FragmentProgram.fromAsset('mat2_uniform.frag.iplr');
+
+    final FragmentShader shader = program.fragmentShader();
+    shader.setFloat(0, 1);
+    shader.setFloat(1, 0);
+    shader.setFloat(2, 0);
+    shader.setFloat(3, 0);
+
+    await _expectShaderRendersGreen(shader);
+    shader.dispose();
+  });
+
+  _runImpellerTest('FragmentShader shader with mat2 renders correctly slot 1', () async {
+    final FragmentProgram program = await FragmentProgram.fromAsset('mat2_uniform.frag.iplr');
+
+    final FragmentShader shader = program.fragmentShader();
+    shader.setFloat(0, 0);
+    shader.setFloat(1, 1);
+    shader.setFloat(2, 0);
+    shader.setFloat(3, 0);
+
+    await _expectShaderRendersGreen(shader);
+    shader.dispose();
+  });
+
+  _runImpellerTest('FragmentShader shader with mat2 renders correctly slot 2', () async {
+    final FragmentProgram program = await FragmentProgram.fromAsset('mat2_uniform.frag.iplr');
+
+    final FragmentShader shader = program.fragmentShader();
+    shader.setFloat(0, 0);
+    shader.setFloat(1, 0);
+    shader.setFloat(2, 1);
+    shader.setFloat(3, 0);
+
+    await _expectShaderRendersGreen(shader);
+    shader.dispose();
+  });
+
+  _runImpellerTest('FragmentShader shader with mat2 renders correctly slot 3', () async {
+    final FragmentProgram program = await FragmentProgram.fromAsset('mat2_uniform.frag.iplr');
+
+    final FragmentShader shader = program.fragmentShader();
+    shader.setFloat(0, 0);
+    shader.setFloat(1, 0);
+    shader.setFloat(2, 0);
+    shader.setFloat(3, 1);
 
     await _expectShaderRendersGreen(shader);
     shader.dispose();

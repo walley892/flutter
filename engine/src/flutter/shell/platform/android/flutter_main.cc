@@ -50,17 +50,6 @@ fml::jni::ScopedJavaGlobalRef<jclass>* g_flutter_jni_class = nullptr;
 // See:
 //   * https://github.com/flutter/flutter/issues/167850
 //   * http://crbug.com/141785
-#ifdef FML_OS_ANDROID
-bool IsVivante() {
-  char product_model[PROP_VALUE_MAX];
-  __system_property_get("ro.hardware.egl", product_model);
-  return strcmp(product_model, "VIVANTE") == 0;
-}
-#else
-bool IsVivante() {
-  return false;
-}
-#endif  // FML_OS_ANDROID
 
 }  // anonymous namespace
 
@@ -268,38 +257,7 @@ bool FlutterMain::Register(JNIEnv* env) {
 AndroidRenderingAPI FlutterMain::SelectedRenderingAPI(
     const flutter::Settings& settings,
     int api_level) {
-#if !SLIMPELLER
-  if (settings.enable_software_rendering) {
-    if (settings.enable_impeller) {
-      FML_CHECK(!settings.enable_impeller)
-          << "Impeller does not support software rendering. Either disable "
-             "software rendering or disable impeller.";
-    }
-    return AndroidRenderingAPI::kSoftware;
-  }
-
-  // Debug/Profile only functionality for testing a specific
-  // backend configuration.
-#ifndef FLUTTER_RELEASE
-  if (settings.requested_rendering_backend == "opengles" &&
-      settings.enable_impeller) {
-    return AndroidRenderingAPI::kImpellerOpenGLES;
-  }
-  if (settings.requested_rendering_backend == "vulkan" &&
-      settings.enable_impeller) {
-    return AndroidRenderingAPI::kImpellerVulkan;
-  }
-#endif
-
-  if (settings.enable_impeller &&
-      api_level >= kMinimumAndroidApiLevelForImpeller && !IsVivante()) {
-    return AndroidRenderingAPI::kImpellerAutoselect;
-  }
-
-  return AndroidRenderingAPI::kSkiaOpenGLES;
-#else
-  return AndroidRenderingAPI::kImpellerAutoselect;
-#endif  // !SLIMPELLER
+  return AndroidRenderingAPI::kImpellerVulkan;
 }
 
 }  // namespace flutter

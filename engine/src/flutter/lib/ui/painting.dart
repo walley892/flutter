@@ -5464,6 +5464,8 @@ base class FragmentProgram extends NativeFieldWrapperClass1 {
     for (final Object? entryDynamic in _uniformInfo) {
       final entry = entryDynamic! as Map<String, Object>;
       final int sizeInFloats = (entry['size'] as int? ?? 0) ~/ sizeOfFloat;
+      print("UNIFORM INFO");
+      print(entry);
       if (entry['name'] == name) {
         if (index + 1 > sizeInFloats) {
           throw ArgumentError('Index `$index` out of bounds for `$name`.');

@@ -397,11 +397,16 @@ std::shared_ptr<RuntimeStageData::Shader> Reflector::GenerateRuntimeStageData()
         compiler_->get_decoration(ubo.id, spv::Decoration::DecorationBinding);
     auto members = ReadStructMembers(ubo.type_id);
     std::vector<uint8_t> struct_layout;
+    std::vector<StructElement> struct_elements;
     size_t float_count = 0;
 
     for (size_t i = 0; i < members.size(); i += 1) {
       const auto& member = members[i];
-      FML_LOG(IMPORTANT) << member.name;
+      FML_LOG(IMPORTANT) << member.name << " : " << i;
+      StructElement e;
+      e.name = member.name;
+      e.index = i;
+      struct_elements.push_back(e);
       std::vector<int> bytes;
       switch (member.underlying_type) {
         case StructMember::UnderlyingType::kPadding: {
@@ -442,12 +447,14 @@ std::shared_ptr<RuntimeStageData::Shader> Reflector::GenerateRuntimeStageData()
           return nullptr;
       }
     }
+    FML_LOG(IMPORTANT) << "NUM_MEMBERS" << struct_elements.size();
     data->uniforms.emplace_back(UniformDescription{
         .name = ubo.name,
         .location = binding,
         .binding = binding,
         .type = spirv_cross::SPIRType::Struct,
         .struct_layout = std::move(struct_layout),
+        .struct_elements = std::move(struct_elements),
         .struct_float_count = float_count,
     });
   }

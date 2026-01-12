@@ -445,9 +445,9 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
   // We need to invoke the compiler even if we don't use the SL mapping later
   // for Vulkan. The reflector needs information that is only valid after a
   // successful compilation call.
-  auto sl_compilation_result =
-      CreateMappingWithString(sl_compiler.GetCompiler()->compile());
-
+  auto str = sl_compiler.GetCompiler()->compile();
+  auto sl_compilation_result = CreateMappingWithString(str);
+  FML_LOG(IMPORTANT) << "STRING: " << str;
   // If the target is Vulkan, our shading language is SPIRV which we already
   // have. We just need to strip it of debug information. If it isn't, we need
   // to invoke the appropriate compiler to compile the SPIRV to the target SL.
@@ -455,6 +455,7 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
       source_options.target_platform == TargetPlatform::kRuntimeStageVulkan) {
     auto stripped_spirv_options = spirv_options;
     stripped_spirv_options.generate_debug_info = false;
+
     sl_mapping_ = spv_compiler.CompileToSPV(
         error_stream_, stripped_spirv_options.BuildShadercOptions());
   } else {
