@@ -116,7 +116,7 @@ Dart_Handle ConvertUniformDescriptionToMap(
       Dart_ListSetAt(struct_indices, i++, Dart_NewInteger(elem.index));
     }
     [[maybe_unused]] Dart_Handle result = Dart_ListSetAt(
-        keys, 4, Dart_NewStringFromCString("struct_member_indices"));
+        keys, 4, Dart_NewStringFromCString("struct_member_size"));
     FML_DCHECK(!Dart_IsError(result));
     result = Dart_ListSetAt(values, 4, struct_indices);
     FML_DCHECK(!Dart_IsError(result));

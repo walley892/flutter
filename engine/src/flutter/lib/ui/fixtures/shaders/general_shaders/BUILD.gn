@@ -31,6 +31,7 @@ if (enable_unittests) {
     "uniforms.frag",
     "vec3_uniform.frag",
     "mat2_uniform.frag",
+    "float_array_uniforms.frag",
   ]
 
   group("general_shaders") {

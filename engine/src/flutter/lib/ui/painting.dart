@@ -5461,8 +5461,44 @@ base class FragmentProgram extends NativeFieldWrapperClass1 {
     var offset = 0;
     var found = false;
     const sizeOfFloat = 4;
+
     for (final Object? entryDynamic in _uniformInfo) {
       final entry = entryDynamic! as Map<String, Object>;
+
+      if (entry['type'] == 'Struct') {
+        int ind = 0;
+        final element_names = entry['struct_member_elements']! as List<dynamic>;
+        final element_sizes = entry['struct_member_size']! as List<dynamic>;
+
+        for (final element_name_dynamic in element_names) {
+          final element_name = element_name_dynamic! as String;
+          final element_size = element_sizes[ind]! as int;
+          final int sizeInFloats = element_size ~/ sizeOfFloat;
+          if (element_name == name) {
+            if (index + 1 > sizeInFloats) {
+              throw ArgumentError('Index `$index` out of bounds for `$name`.');
+            }
+
+            found = true;
+            break;
+          }
+          offset += sizeInFloats;
+          ind += 1;
+        }
+      }
+
+      if (!found) {
+        throw ArgumentError('No uniform named "$name".');
+      }
+
+      return offset + index;
+    }
+    if (!found) {
+      throw ArgumentError('No uniform named "$name".');
+    }
+    return 0;
+  }
+  /*
       final int sizeInFloats = (entry['size'] as int? ?? 0) ~/ sizeOfFloat;
       print("UNIFORM INFO");
       print(entry);
@@ -5482,9 +5518,7 @@ base class FragmentProgram extends NativeFieldWrapperClass1 {
     if (!found) {
       throw ArgumentError('No uniform named "$name".');
     }
-
-    return offset + index;
-  }
+*/
 
   @pragma('vm:entry-point')
   late int _uniformFloatCount;

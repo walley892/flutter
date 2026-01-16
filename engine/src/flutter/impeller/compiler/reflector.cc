@@ -403,10 +403,7 @@ std::shared_ptr<RuntimeStageData::Shader> Reflector::GenerateRuntimeStageData()
     for (size_t i = 0; i < members.size(); i += 1) {
       const auto& member = members[i];
       FML_LOG(IMPORTANT) << member.name << " : " << i;
-      StructElement e;
-      e.name = member.name;
-      e.index = i;
-      struct_elements.push_back(e);
+
       std::vector<int> bytes;
       switch (member.underlying_type) {
         case StructMember::UnderlyingType::kPadding: {
@@ -419,6 +416,10 @@ std::shared_ptr<RuntimeStageData::Shader> Reflector::GenerateRuntimeStageData()
           break;
         }
         case StructMember::UnderlyingType::kFloat: {
+          StructElement e;
+          e.name = member.name;
+          e.index = member.size;
+          struct_elements.push_back(e);
           if (member.array_elements > 1) {
             // For each array element member, insert 1 layout property per byte
             // and 0 layout property per byte of padding

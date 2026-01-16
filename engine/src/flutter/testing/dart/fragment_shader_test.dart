@@ -308,6 +308,18 @@ void main() async {
     shader.dispose();
   });
 
+  test('FragmentShader works with float array', () async {
+    final FragmentProgram program = await FragmentProgram.fromAsset(
+      'float_array_uniforms.frag.iplr',
+    );
+    final FragmentShader shader = program.fragmentShader();
+    shader.setFloat(0, 1);
+    shader.setFloat(1, 1);
+    shader.setFloat(2, 1);
+    await _expectShaderRendersGreen(shader);
+    shader.dispose();
+  });
+
   group('FragmentProgram getUniform*', () {
     late FragmentShader shader;
 
