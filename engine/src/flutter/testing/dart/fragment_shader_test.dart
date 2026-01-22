@@ -763,8 +763,6 @@ void main() async {
   _runImpellerTest('Shader Compiler appropriately pads vec3 uniform arrays', () async {
     // TODO(gaaclarke): This test was disabled for a long time and has been
     // atrophied. Fix it or remove it.
-    print('Atrophied test is disabled.');
-    return;
 
     // ignore: dead_code
     final FragmentProgram program = await FragmentProgram.fromAsset('vec3_uniform.frag.iplr');
@@ -772,9 +770,9 @@ void main() async {
 
     // Set the last vec3 in the uniform array to green. The shader will read this
     // value, and if the uniforms were padded correctly will render green.
-    shader.setFloat(12, 0);
-    shader.setFloat(13, 1.0);
-    shader.setFloat(14, 0);
+    shader.setFloat(9, 0);
+    shader.setFloat(10, 1.0);
+    shader.setFloat(11, 0);
 
     await _expectShaderRendersGreen(shader);
   });

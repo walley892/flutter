@@ -244,13 +244,15 @@ bool RuntimeEffectContents::Render(const ContentContext& renderer,
     // Uniforms are ordered in the IPLR according to their
     // declaration and the uniform location reflects the correct offset to
     // be mapped to - except that it may include all proceeding
-    // uniforms of a different type. For example, a texture sampler that comes
-    // after 4 float uniforms may have a location of 4. Since we know that
-    // the declarations are already ordered, we can track the uniform location
-    // ourselves.
+    // uniforms of a different type. For example, a texture sampler that
+    // comes after 4 float uniforms may have a location of 4. Since we know
+    // that the declarations are already ordered, we can track the uniform
+    // location ourselves.
     auto& data_host_buffer = renderer.GetTransientsDataBuffer();
     for (const auto& uniform : runtime_stage_->GetUniforms()) {
       std::unique_ptr<ShaderMetadata> metadata = MakeShaderMetadata(uniform);
+      for (auto m : metadata->members) {
+      }
       switch (uniform.type) {
         case kSampledImage: {
           FML_DCHECK(sampler_location < texture_inputs_.size());
@@ -276,22 +278,60 @@ bool RuntimeEffectContents::Render(const ContentContext& renderer,
               << "Uniform " << uniform.name
               << " had unexpected type kFloat for Vulkan backend.";
 
-          size_t alignment =
-              std::max(uniform.bit_width / 8,
-                       data_host_buffer.GetMinimumUniformAlignment());
-          BufferView buffer_view =
-              data_host_buffer.Emplace(uniform_data_->data() + buffer_offset,
-                                       uniform.GetSize(), alignment);
+          if (uniform.array_elements.value_or(0) == 0) {
+            size_t alignment =
+                std::max(uniform.bit_width / 8,
+                         data_host_buffer.GetMinimumUniformAlignment());
 
-          ShaderUniformSlot uniform_slot;
-          uniform_slot.name = uniform.name.c_str();
-          uniform_slot.ext_res_0 = buffer_location;
-          pass.BindDynamicResource(ShaderStage::kFragment,
-                                   DescriptorType::kUniformBuffer, uniform_slot,
-                                   std::move(metadata), std::move(buffer_view));
-          buffer_index++;
-          buffer_offset += uniform.GetSize();
-          buffer_location++;
+            BufferView buffer_view =
+                data_host_buffer.Emplace(uniform_data_->data() + buffer_offset,
+                                         uniform.GetSize(), alignment);
+
+            ShaderUniformSlot uniform_slot;
+            uniform_slot.name = uniform.name.c_str();
+            uniform_slot.ext_res_0 = buffer_location;
+            pass.BindDynamicResource(
+                ShaderStage::kFragment, DescriptorType::kUniformBuffer,
+                uniform_slot, std::move(metadata), std::move(buffer_view));
+            buffer_index++;
+            buffer_offset += uniform.GetSize();
+            buffer_location++;
+            break;
+
+          } else {
+            std::vector<float> uniform_buffer;
+
+            int element_byte_size = uniform.dimensions.rows;
+            int element_padding_size =
+                uniform.bit_width / 8 - uniform.dimensions.rows;
+
+            for (int i = 0; i < uniform.array_elements; ++i) {
+              for (int j = 0; j < element_byte_size; ++j) {
+                uniform_buffer.push_back(reinterpret_cast<const float*>(
+                    uniform_data_->data())[buffer_offset++]);
+              }
+              for (int j = 0; j < element_padding_size; ++j) {
+                uniform_buffer.push_back(0);
+              }
+            }
+
+            size_t alignment =
+                std::max(uniform.bit_width / 8,
+                         data_host_buffer.GetMinimumUniformAlignment());
+
+            BufferView buffer_view = data_host_buffer.Emplace(
+                reinterpret_cast<const void*>(uniform_buffer.data()),
+                sizeof(float) * uniform_buffer.size(), alignment);
+
+            ShaderUniformSlot uniform_slot;
+            uniform_slot.name = uniform.name.c_str();
+            uniform_slot.ext_res_0 = buffer_location;
+            pass.BindDynamicResource(
+                ShaderStage::kFragment, DescriptorType::kUniformBuffer,
+                uniform_slot, std::move(metadata), std::move(buffer_view));
+            buffer_index++;
+            buffer_location++;
+          }
           break;
         }
         case kStruct: {

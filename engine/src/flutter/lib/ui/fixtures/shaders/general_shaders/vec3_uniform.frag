@@ -6,10 +6,10 @@
 
 precision highp float;
 
-uniform vec3[4] color_array;
+uniform vec3[4] colors;
 
 out vec4 fragColor;
 
 void main() {
-  fragColor = vec4(color_array[3].xyz, 1);
+  fragColor = vec4(colors[3].xyz, 1);
 }
