@@ -22,64 +22,63 @@ uniform vec2[ARRAY_SIZE] uVec2Array;
 uniform vec3[ARRAY_SIZE] uVec3Array;
 uniform vec4[ARRAY_SIZE] uVec4Array;
 
-void main(){
-    float u = FlutterFragCoord().x/N_COLOR_VALUES;
+void main() {
+  float u = FlutterFragCoord().x / N_COLOR_VALUES;
 
-    float increment = 1.0/ N_COLOR_VALUES;
+  float increment = 1.0 / N_COLOR_VALUES;
 
-    float offset = increment;
+  float offset = increment;
 
-    if(u < offset){
-        fragColor = vec4(uFloat, 0, 0, 1);
-        return;
+  if (u < offset) {
+    fragColor = vec4(uFloat, 0, 0, 1);
+    return;
+  }
+  offset += increment;
+  if (u < offset) {
+    fragColor = vec4(uVec2, 0, 1);
+    return;
+  }
+  offset += increment;
+  if (u < offset) {
+    fragColor = vec4(uVec3, 1);
+    return;
+  }
+  offset += increment;
+  if (u < offset) {
+    fragColor = uVec4;
+    return;
+  }
+  offset += increment;
+
+  for (int i = 0; i < ARRAY_SIZE; ++i) {
+    if (u < offset) {
+      fragColor = vec4(uFloatArray[i], 0, 0, 1);
+      return;
     }
     offset += increment;
-    if(u < offset){
-        fragColor = vec4(uVec2, 0, 1);
-        return;
+  }
+
+  for (int i = 0; i < ARRAY_SIZE; ++i) {
+    if (u < offset) {
+      fragColor = vec4(uVec2Array[i], 0, 1);
+      return;
     }
     offset += increment;
-    if(u < offset){
-        fragColor = vec4(uVec3, 1);
-        return;
+  }
+
+  for (int i = 0; i < ARRAY_SIZE; ++i) {
+    if (u < offset) {
+      fragColor = vec4(uVec3Array[i], 1);
+      return;
     }
     offset += increment;
-    if(u < offset) {
-        fragColor = uVec4;
-        return;
+  }
+
+  for (int i = 0; i < ARRAY_SIZE; ++i) {
+    if (u < offset) {
+      fragColor = uVec4Array[i];
+      return;
     }
     offset += increment;
-
-    for(int i = 0; i < ARRAY_SIZE; ++i){
-        if(u < offset){
-            fragColor = vec4(uFloatArray[i], 0, 0, 1);
-            return;
-        }
-        offset += increment;
-    }
-
-    for(int i = 0; i < ARRAY_SIZE; ++i){
-        if(u < offset){
-            fragColor = vec4(uVec2Array[i], 0, 1);
-            return;
-        }
-        offset += increment;
-    }
-
-    for(int i = 0; i < ARRAY_SIZE; ++i){
-        if(u < offset){
-            fragColor = vec4(uVec3Array[i], 1);
-            return;
-        }
-        offset += increment;
-    }
-
-    for(int i = 0; i < ARRAY_SIZE; ++i){
-        if(u < offset){
-            fragColor = uVec4Array[i];
-            return;
-        }
-        offset += increment;
-    }
-    
+  }
 }
