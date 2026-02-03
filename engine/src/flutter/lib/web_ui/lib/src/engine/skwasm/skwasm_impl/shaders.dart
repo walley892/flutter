@@ -376,7 +376,7 @@ class SkwasmFragmentShader implements SkwasmShader, ui.FragmentShader {
 
     IndexError.check(index, info.floatCount, message: 'Index `$index` out of bounds for `$name`.');
 
-    return SkwasmUniformFloatSlot._(this, index, name, info.location + index);
+    return SkwasmUniformFloatSlot._(this, index, name, info.floatOffset + index);
   }
 
   @override
@@ -411,7 +411,7 @@ class SkwasmFragmentShader implements SkwasmShader, ui.FragmentShader {
 
     return List<SkwasmUniformFloatSlot>.generate(
       size,
-      (i) => SkwasmUniformFloatSlot._(this, i, name, info.location + i),
+      (i) => SkwasmUniformFloatSlot._(this, i, name, info.floatOffset + i),
     );
   }
 
@@ -432,7 +432,7 @@ class SkwasmFragmentShader implements SkwasmShader, ui.FragmentShader {
     final elements = List<T>.generate(numElements, (i) {
       final slots = List<SkwasmUniformFloatSlot>.generate(
         info.floatCount,
-        (j) => SkwasmUniformFloatSlot._(this, j, name, info.location + i * elementSize + j),
+        (j) => SkwasmUniformFloatSlot._(this, j, name, info.floatOffset + i * elementSize + j),
       );
       return elementFactory(slots);
     });
