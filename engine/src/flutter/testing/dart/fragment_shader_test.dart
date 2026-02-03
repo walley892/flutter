@@ -12,7 +12,6 @@ import 'dart:ui';
 
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
-import 'package:vector_math/vector_math_64.dart';
 
 import 'goldens.dart';
 import 'impeller_enabled.dart';
@@ -113,14 +112,14 @@ void main() async {
     group('float', () {
       test('set using setUniformFloat', () async {
         final FragmentShader shader = shaderMap[UniformFloatSlot]!;
-        const color = Color.fromRGBO(255, 0, 0, 1);
+        const color = Color.fromARGB(255, 255, 0, 0);
         shader.setFloat(0, color.r);
         _expectShaderRendersColor(shader, color);
       });
 
       test('set using getUniformFloat', () async {
         final FragmentShader shader = shaderMap[UniformFloatSlot]!;
-        const color = Color.fromRGBO(50, 0, 0, 1);
+        const color = Color.fromARGB(255, 50, 0, 0);
         shader.getUniformFloat('color_r').set(color.r);
         _expectShaderRendersColor(shader, color);
       });
@@ -156,7 +155,7 @@ void main() async {
     group('vec2', () {
       test('set using setFloat', () async {
         final FragmentShader shader = shaderMap[UniformVec2Slot]!;
-        const color = Color.fromRGBO(255, 255, 0, 1);
+        const color = Color.fromARGB(255, 255, 255, 0);
         shader.setFloat(0, color.r);
         shader.setFloat(1, color.g);
         _expectShaderRendersColor(shader, color);
@@ -164,7 +163,7 @@ void main() async {
 
       test('set using getUniformVec2', () async {
         final FragmentShader shader = shaderMap[UniformVec2Slot]!;
-        const color = Color.fromRGBO(50, 50, 0, 1);
+        const color = Color.fromARGB(255, 50, 50, 0);
         shader.getUniformVec2('color_rg').set(color.r, color.g);
         _expectShaderRendersColor(shader, color);
       });
@@ -186,7 +185,7 @@ void main() async {
     group('vec3', () {
       test('set using setFloat', () async {
         final FragmentShader shader = shaderMap[UniformVec3Slot]!;
-        const color = Color.fromRGBO(67, 42, 12, 1);
+        const color = Color.fromARGB(255, 67, 42, 12);
         shader.setFloat(0, color.r);
         shader.setFloat(1, color.g);
         shader.setFloat(2, color.b);
@@ -198,7 +197,7 @@ void main() async {
 
       test('set using getUniformVec3', () async {
         final FragmentShader shader = shaderMap[UniformVec3Slot]!;
-        const color = Color.fromRGBO(42, 67, 12, 1);
+        const color = Color.fromARGB(255, 42, 67, 12);
         shader.getUniformVec3('color_rgb').set(color.r, color.g, color.b);
         _expectShaderRendersColor(shader, color);
       });
@@ -220,7 +219,7 @@ void main() async {
 
     group('vec4', () {
       test('set using setFloat', () async {
-        const color = Color.fromRGBO(67, 42, 12, 1);
+        const color = Color.fromARGB(255, 67, 42, 12);
         final FragmentShader shader = shaderMap[UniformVec4Slot]!;
         shader.setFloat(0, color.r);
         shader.setFloat(1, color.g);
@@ -230,7 +229,7 @@ void main() async {
       });
 
       test('set using getUniformFloat', () async {
-        const color = Color.fromRGBO(12, 37, 27, 1);
+        const color = Color.fromARGB(255, 12, 37, 27);
         final FragmentShader shader = shaderMap[UniformVec4Slot]!;
         shader.getUniformVec4('color_rgba').set(color.r, color.g, color.b, color.a);
         _expectShaderRendersColor(shader, color);
@@ -253,7 +252,7 @@ void main() async {
 
     group('float array', () {
       test('set using setFloat', () {
-        const color = Color.fromRGBO(11, 22, 96, 1);
+        const color = Color.fromARGB(255, 11, 22, 96);
         final FragmentShader shader = shaderMap[UniformArray<UniformFloatSlot>]!;
         shader.setFloat(0, color.r);
         shader.setFloat(1, color.g);
@@ -263,7 +262,7 @@ void main() async {
       });
 
       test('set using getUniformFloatArray', () async {
-        const color = Color.fromRGBO(96, 11, 22, 1);
+        const color = Color.fromARGB(255, 96, 11, 22);
         final FragmentShader shader = shaderMap[UniformArray<UniformFloatSlot>]!;
         final UniformArray<UniformFloatSlot> colorRgba = shader.getUniformFloatArray('color_array');
         colorRgba[0].set(color.r);
@@ -276,7 +275,7 @@ void main() async {
 
     group('vec2 array', () {
       test('set using setFloat', () async {
-        const color = Color.fromRGBO(67, 42, 12, 1);
+        const color = Color.fromARGB(255, 67, 42, 12);
         final FragmentShader shader = shaderMap[UniformArray<UniformVec2Slot>]!;
         shader.setFloat(0, color.r);
         shader.setFloat(1, color.g);
@@ -286,7 +285,7 @@ void main() async {
       });
 
       test('set using getUniformVec2Array', () async {
-        const color = Color.fromRGBO(1, 73, 26, 1);
+        const color = Color.fromARGB(255, 1, 73, 26);
         final FragmentShader shader = shaderMap[UniformArray<UniformVec2Slot>]!;
         final UniformArray<UniformVec2Slot> colorRgba = shader.getUniformVec2Array('color_array');
         colorRgba[0].set(color.r, color.g);
@@ -311,7 +310,7 @@ void main() async {
 
     group('vec3 array', () {
       test('set using setFloat', () async {
-        const cpuColors = [Color.fromRGBO(67, 42, 12, 1), Color.fromRGBO(11, 22, 96, 1)];
+        const cpuColors = [Color.fromARGB(255, 67, 42, 12), Color.fromARGB(255, 11, 22, 96)];
         final FragmentShader shader = shaderMap[UniformArray<UniformVec3Slot>]!;
         shader.setFloat(0, 2);
         shader.setFloat(1, 2);
@@ -325,7 +324,7 @@ void main() async {
       });
 
       test('set using getUniformVec3Array', () async {
-        const cpuColors = [Color.fromRGBO(11, 22, 96, 1), Color.fromRGBO(67, 42, 12, 1)];
+        const cpuColors = [Color.fromARGB(255, 11, 22, 96), Color.fromARGB(255, 67, 42, 12)];
         final FragmentShader shader = shaderMap[UniformArray<UniformVec3Slot>]!;
         shader.getUniformVec2('u_size').set(2, 2);
         final UniformArray<UniformVec3Slot> gpuColors = shader.getUniformVec3Array('color_array');
@@ -351,7 +350,7 @@ void main() async {
 
     group('vec4 array', () {
       test('set using setFloat', () async {
-        const cpuColors = [Color.fromRGBO(67, 42, 12, 0.3), Color.fromRGBO(11, 22, 96, 0.2)];
+        const cpuColors = [Color.fromARGB(77, 67, 42, 12), Color.fromARGB(51, 11, 22, 96)];
         final FragmentShader shader = shaderMap[UniformArray<UniformVec4Slot>]!;
         // 'u_size'
         shader.setFloat(0, 2);
@@ -368,7 +367,7 @@ void main() async {
       });
 
       test('set using getUniformVec4Array', () async {
-        const cpuColors = [Color.fromRGBO(11, 22, 96, 0.2), Color.fromRGBO(67, 42, 12, 0.3)];
+        const cpuColors = [Color.fromARGB(51, 11, 22, 96), Color.fromARGB(77, 67, 42, 12)];
         final FragmentShader shader = shaderMap[UniformArray<UniformVec4Slot>]!;
         shader.getUniformVec2('u_size').set(2, 2);
         final UniformArray<UniformVec4Slot> colors = shader.getUniformVec4Array('color_array');
@@ -403,42 +402,42 @@ void main() async {
       setUp(() async {
         cpuColors = List<Color>.empty(growable: true);
         // uFloat
-        cpuColors.add(Color.fromRGBO(random.nextInt(255), 0, 0, 1));
+        cpuColors.add(Color.fromARGB(255, random.nextInt(255), 0, 0));
         // uVec2
-        cpuColors.add(Color.fromRGBO(random.nextInt(255), random.nextInt(255), 0, 1));
+        cpuColors.add(Color.fromARGB(255, random.nextInt(255), random.nextInt(255), 0));
         // uVec3
         cpuColors.add(
-          Color.fromRGBO(random.nextInt(255), random.nextInt(255), random.nextInt(255), 1),
+          Color.fromARGB(255, random.nextInt(255), random.nextInt(255), random.nextInt(255)),
         );
         // uVec4
         cpuColors.add(
-          Color.fromRGBO(
+          Color.fromARGB(
             random.nextInt(255),
             random.nextInt(255),
             random.nextInt(255),
-            random.nextDouble(),
+            random.nextInt(255),
           ),
         );
         for (var i = 0; i < 10; ++i) {
-          cpuColors.add(Color.fromRGBO(random.nextInt(255), 0, 0, 1));
+          cpuColors.add(Color.fromARGB(255, random.nextInt(255), 0, 0));
         }
 
         for (var i = 0; i < 10; ++i) {
-          cpuColors.add(Color.fromRGBO(random.nextInt(255), random.nextInt(255), 0, 1));
+          cpuColors.add(Color.fromARGB(255, random.nextInt(255), random.nextInt(255), 0));
         }
 
         for (var i = 0; i < 10; ++i) {
           cpuColors.add(
-            Color.fromRGBO(random.nextInt(255), random.nextInt(255), random.nextInt(255), 1),
+            Color.fromARGB(255, random.nextInt(255), random.nextInt(255), random.nextInt(255)),
           );
         }
         for (var i = 0; i < 10; ++i) {
           cpuColors.add(
-            Color.fromRGBO(
+            Color.fromARGB(
               random.nextInt(255),
               random.nextInt(255),
               random.nextInt(255),
-              random.nextDouble(),
+              random.nextInt(255),
             ),
           );
         }
@@ -1020,7 +1019,7 @@ void _expectFragmentShadersRenderGreen(Map<String, FragmentProgram> programs) {
 Future<void> _expectShaderRendersBarcode(Shader shader, List<Color> barcodeColors) async {
   final ByteData renderedBytes = (await _imageByteDataFromShader(
     shader: shader,
-    imageDimension: barcodeColors.length * 2,
+    imageDimension: barcodeColors.length,
   ))!;
 
   expect(renderedBytes.lengthInBytes % 4, 0);
