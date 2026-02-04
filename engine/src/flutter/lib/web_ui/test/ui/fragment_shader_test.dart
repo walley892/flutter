@@ -881,7 +881,7 @@ Future<void> testMain() async {
           await _expectShaderRendersColor(shader, color);
         });
 
-        test('set using getUniformFloat', () async {
+        test('set using getUniformVec4', () async {
           const color = ui.Color.fromARGB(255, 12, 37, 27);
           final ui.FragmentShader shader = shaderMap[ui.UniformVec4Slot]!;
           shader.getUniformVec4('color_rgba').set(color.r, color.g, color.b, color.a);
