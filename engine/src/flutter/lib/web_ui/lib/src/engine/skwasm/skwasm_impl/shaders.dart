@@ -228,7 +228,9 @@ class SkwasmFragmentProgram extends SkwasmObjectWrapper<RawRuntimeEffect>
     final shaderData = ShaderData.fromBytes(bytes);
 
     // TODO(jacksongardner): Can we avoid this copy?
-    final List<int> sourceData = utf8.encode(shaderData.source);
+    final List<int> sourceData =
+        shaderData.rawBytes ??
+        utf8.encode(renderer.isWimp ? shaderData.wimpJson : shaderData.source);
     final SkStringHandle sourceString = skStringAllocate(sourceData.length);
     final Pointer<Int8> sourceBuffer = skStringGetData(sourceString);
     var i = 0;

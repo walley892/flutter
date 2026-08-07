@@ -5,24 +5,41 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:ui/src/engine.dart';
+
 class ShaderData {
   ShaderData({
     required this.source,
     required this.uniforms,
     required this.floatCount,
     required this.textureCount,
+    required this.wimpJson,
+    this.rawBytes,
   });
 
   factory ShaderData.fromBytes(Uint8List data) {
+    if (renderer.isWimp && _isIplr(data)) {
+      return ShaderData(
+        source: '',
+        uniforms: <UniformData>[],
+        floatCount: 0,
+        textureCount: 0,
+        wimpJson: '',
+        rawBytes: data,
+      );
+    }
     final String contents = utf8.decode(data);
     final Object? rawShaderData = json.decode(contents);
     if (rawShaderData is! Map<String, Object?>) {
       throw const FormatException('Invalid Shader Data');
     }
-    final Object? root = rawShaderData['sksl'];
+    final Object? root = renderer.isWimp
+        ? (rawShaderData['opengles3'] ?? rawShaderData['sksl'])
+        : rawShaderData['sksl'];
     if (root is! Map<String, Object?>) {
       throw const FormatException('Invalid Shader Data');
     }
+    final String wimpJson = json.encode(root);
 
     final Object? source = root['shader'];
     final Object? rawUniforms = root['uniforms'];
@@ -88,13 +105,24 @@ class ShaderData {
       uniforms: uniforms,
       floatCount: floatCount,
       textureCount: textureCount,
+      wimpJson: wimpJson,
     );
+  }
+
+  static bool _isIplr(Uint8List data) {
+    return data.length >= 4 &&
+        data[0] == 0x49 && // 'I'
+        data[1] == 0x50 && // 'P'
+        data[2] == 0x4C && // 'L'
+        data[3] == 0x52; // 'R'
   }
 
   String source;
   List<UniformData> uniforms;
   int floatCount;
   int textureCount;
+  String wimpJson;
+  Uint8List? rawBytes;
 }
 
 class UniformData {

@@ -14,6 +14,7 @@ import 'package:ui/ui_web/src/ui_web.dart' as ui_web;
 class SkwasmRenderer extends Renderer {
   bool get isMultiThreaded => false;
 
+  @override
   bool get isWimp => false;
 
   @override

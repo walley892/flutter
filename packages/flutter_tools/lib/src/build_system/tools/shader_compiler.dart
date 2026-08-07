@@ -200,10 +200,10 @@ class ShaderCompiler {
       case TargetPlatform.fuchsia_arm64:
       case TargetPlatform.fuchsia_x64:
       case TargetPlatform.tester:
-        return <String>['--sksl', '--runtime-stage-vulkan'];
+        return <String>['--sksl', '--runtime-stage-vulkan', '--runtime-stage-gles3'];
 
       case TargetPlatform.web_javascript:
-        return <String>['--sksl'];
+        return <String>['--sksl', '--runtime-stage-gles3'];
 
       case TargetPlatform.unsupported:
         TargetPlatform.throwUnsupportedTarget();

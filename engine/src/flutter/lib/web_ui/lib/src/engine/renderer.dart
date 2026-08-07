@@ -41,6 +41,7 @@ abstract class Renderer {
   }
 
   String get rendererTag;
+  bool get isWimp => false;
   FlutterFontCollection get fontCollection;
 
   late Rasterizer rasterizer;
