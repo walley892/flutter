@@ -23,6 +23,7 @@
 #include "impeller/compiler/types.h"
 #include "impeller/compiler/uniform_sorter.h"
 #include "impeller/compiler/utilities.h"
+#include "spirv-tools/optimizer.hpp"
 #include "third_party/skia/include/core/SkString.h"
 #include "third_party/skia/include/effects/SkRuntimeEffect.h"
 
@@ -45,6 +46,42 @@ bool IsGLTargetPlatform(TargetPlatform platform) {
          platform == TargetPlatform::kOpenGLDesktop ||
          platform == TargetPlatform::kRuntimeStageGLES ||
          platform == TargetPlatform::kRuntimeStageGLES3;
+}
+
+// Runs MergeReturnPass to eliminate multiple return statements for GL targets.
+// This works around a d3dcompiler_47.dll crash in ANGLE's D3D11 backend when
+// early returns coexist with dynamic uniform array indexing and texture
+// sampling. See flutter/flutter#190809.
+std::shared_ptr<fml::Mapping> OptimizeSPIRVForGL(
+    const std::shared_ptr<fml::Mapping>& spirv,
+    TargetPlatform platform) {
+  if (!spirv || spirv->GetMapping() == nullptr || spirv->GetSize() == 0) {
+    return spirv;
+  }
+
+  spv_target_env env = SPV_ENV_UNIVERSAL_1_3;
+  if (platform == TargetPlatform::kRuntimeStageGLES ||
+      platform == TargetPlatform::kRuntimeStageGLES3) {
+    env = SPV_ENV_OPENGL_4_5;
+  }
+
+  spvtools::Optimizer optimizer(env);
+  optimizer.RegisterPass(spvtools::CreateMergeReturnPass());
+
+  std::vector<uint32_t> optimized_words;
+  const auto* words = reinterpret_cast<const uint32_t*>(spirv->GetMapping());
+  const size_t word_count = spirv->GetSize() / sizeof(uint32_t);
+
+  if (!optimizer.Run(words, word_count, &optimized_words)) {
+    return spirv;
+  }
+
+  auto holder =
+      std::make_shared<std::vector<uint32_t>>(std::move(optimized_words));
+  const auto data_length = holder->size() * sizeof(uint32_t);
+  return std::make_unique<fml::NonOwnedMapping>(
+      reinterpret_cast<const uint8_t*>(holder->data()), data_length,
+      [holder](auto, auto) {});
 }
 
 // Wraps the SPIRV-Cross-emitted entry point so `gl_Position.y *=
@@ -540,6 +577,11 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
     return;
   } else {
     included_file_names_ = std::move(included_file_names);
+  }
+
+  if (IsGLTargetPlatform(source_options.target_platform)) {
+    spirv_assembly_ =
+        OptimizeSPIRVForGL(spirv_assembly_, source_options.target_platform);
   }
 
   // SL Generation.

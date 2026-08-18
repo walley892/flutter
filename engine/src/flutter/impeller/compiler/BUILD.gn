@@ -24,7 +24,10 @@ impeller_component("utilities") {
 }
 
 impeller_component("compiler_lib") {
-  include_dirs = [ "//flutter/third_party/vulkan-deps/spirv-cross/src/" ]
+  include_dirs = [
+    "//flutter/third_party/vulkan-deps/spirv-cross/src/",
+    "//flutter/third_party/vulkan-deps/spirv-tools/src/include",
+  ]
 
   # Current versions of libcxx have deprecated some of the UTF-16 string
   # conversion APIs.
@@ -72,6 +75,7 @@ impeller_component("compiler_lib") {
     "//flutter/fml",
     "//flutter/impeller/shader_bundle:shader_bundle_flatbuffers",
     "//flutter/skia",
+    "//flutter/third_party/vulkan-deps/spirv-tools/src:spvtools_opt",
 
     # All third_party deps must be included by the global license script.
     "//third_party/abseil-cpp/absl/status",
