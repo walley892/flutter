@@ -147,11 +147,11 @@ std::shared_ptr<GlslAstNode> ParseGlslStatement(std::string_view code,
     return block;
   }
 
-  // Check for 'return;'
-  if (code.substr(pos, 7) == "return;" ||
-      (code.substr(pos, 6) == "return" && pos + 6 < code.size() &&
-       (std::isspace(static_cast<unsigned char>(code[pos + 6])) ||
-        code[pos + 6] == ';'))) {
+  // Check for 'return;' or 'return ...;'
+  if (code.substr(pos, 6) == "return" &&
+      (pos + 6 >= code.size() ||
+       std::isspace(static_cast<unsigned char>(code[pos + 6])) ||
+       code[pos + 6] == ';')) {
     size_t end = code.find(';', pos);
     if (end != std::string_view::npos) {
       node->type = GlslAstType::kReturn;
@@ -161,73 +161,106 @@ std::shared_ptr<GlslAstNode> ParseGlslStatement(std::string_view code,
     }
   }
 
-  // Check for 'if' or loops
-  if (code.substr(pos, 3) == "if " || code.substr(pos, 3) == "if(") {
-    node->type = GlslAstType::kIf;
+  // Check for control flow constructs: if, for, while, switch
+  bool is_if = (code.substr(pos, 3) == "if " || code.substr(pos, 3) == "if(" ||
+                code.substr(pos, 3) == "if\n");
+  bool is_for =
+      (code.substr(pos, 4) == "for " || code.substr(pos, 4) == "for(" ||
+       code.substr(pos, 4) == "for\n");
+  bool is_while =
+      (code.substr(pos, 6) == "while " || code.substr(pos, 6) == "while(" ||
+       code.substr(pos, 6) == "while\n");
+  bool is_switch =
+      (code.substr(pos, 7) == "switch " || code.substr(pos, 7) == "switch(" ||
+       code.substr(pos, 7) == "switch\n");
+
+  if (is_if || is_for || is_while || is_switch) {
+    node->type = is_if ? GlslAstType::kIf : GlslAstType::kLoop;
     size_t paren_start = code.find('(', pos);
-    int paren_depth = 0;
-    size_t paren_end = paren_start;
-    for (size_t i = paren_start; i < code.size(); ++i) {
-      if (code[i] == '(')
-        paren_depth++;
-      else if (code[i] == ')') {
-        paren_depth--;
-        if (paren_depth == 0) {
-          paren_end = i;
-          break;
+    if (paren_start != std::string_view::npos) {
+      int paren_depth = 0;
+      size_t paren_end = paren_start;
+      for (size_t i = paren_start; i < code.size(); ++i) {
+        if (code[i] == '(')
+          paren_depth++;
+        else if (code[i] == ')') {
+          paren_depth--;
+          if (paren_depth == 0) {
+            paren_end = i;
+            break;
+          }
         }
       }
-    }
-    node->header = std::string(code.substr(pos, paren_end - pos + 1));
-    pos = paren_end + 1;
-    SkipWhitespaceAndComments(code, pos);
-
-    if (pos < code.size() && code[pos] == '{') {
-      pos++;
-      auto body = ParseGlslBlockBody(code, pos);
-      if (body) {
-        node->children = std::move(body->children);
-      }
-      if (pos < code.size() && code[pos] == '}') {
-        pos++;
-      }
-    } else {
-      auto stmt = ParseGlslStatement(code, pos);
-      if (stmt) {
-        node->children.push_back(stmt);
-      }
-    }
-
-    SkipWhitespaceAndComments(code, pos);
-    if (pos + 4 <= code.size() && code.substr(pos, 4) == "else") {
-      pos += 4;
+      node->header = std::string(code.substr(pos, paren_end - pos + 1));
+      pos = paren_end + 1;
       SkipWhitespaceAndComments(code, pos);
+
       if (pos < code.size() && code[pos] == '{') {
         pos++;
-        auto else_body = ParseGlslBlockBody(code, pos);
-        if (else_body) {
-          node->else_children = std::move(else_body->children);
+        auto body = ParseGlslBlockBody(code, pos);
+        if (body) {
+          node->children = std::move(body->children);
         }
         if (pos < code.size() && code[pos] == '}') {
           pos++;
         }
       } else {
-        auto else_stmt = ParseGlslStatement(code, pos);
-        if (else_stmt) {
-          node->else_children.push_back(else_stmt);
+        auto stmt = ParseGlslStatement(code, pos);
+        if (stmt) {
+          node->children.push_back(stmt);
         }
       }
-    }
 
-    return node;
+      // Check for optional 'else' branch for 'if'
+      if (is_if) {
+        SkipWhitespaceAndComments(code, pos);
+        if (pos + 4 <= code.size() && code.substr(pos, 4) == "else" &&
+            (pos + 4 >= code.size() ||
+             std::isspace(static_cast<unsigned char>(code[pos + 4])) ||
+             code[pos + 4] == '{')) {
+          pos += 4;
+          SkipWhitespaceAndComments(code, pos);
+          if (pos < code.size() && code[pos] == '{') {
+            pos++;
+            auto else_body = ParseGlslBlockBody(code, pos);
+            if (else_body) {
+              node->else_children = std::move(else_body->children);
+            }
+            if (pos < code.size() && code[pos] == '}') {
+              pos++;
+            }
+          } else {
+            auto else_stmt = ParseGlslStatement(code, pos);
+            if (else_stmt) {
+              node->else_children.push_back(else_stmt);
+            }
+          }
+        }
+      }
+
+      return node;
+    }
   }
 
-  // Raw statements (assignments, function calls, declarations up to ';')
-  size_t semi = code.find(';', pos);
-  if (semi != std::string_view::npos) {
+  // Raw statement (up to ';', ignoring ';' inside parens)
+  int paren_depth = 0;
+  size_t stmt_end = pos;
+  for (; stmt_end < code.size(); ++stmt_end) {
+    if (code[stmt_end] == '(')
+      paren_depth++;
+    else if (code[stmt_end] == ')')
+      paren_depth = std::max(0, paren_depth - 1);
+    else if (code[stmt_end] == ';' && paren_depth == 0) {
+      break;
+    } else if (code[stmt_end] == '}' && paren_depth == 0) {
+      break;
+    }
+  }
+
+  if (stmt_end < code.size() && code[stmt_end] == ';') {
     node->type = GlslAstType::kRawStatement;
-    node->text = std::string(code.substr(pos, semi - pos + 1));
-    pos = semi + 1;
+    node->text = std::string(code.substr(pos, stmt_end - pos + 1));
+    pos = stmt_end + 1;
     return node;
   }
 
@@ -293,13 +326,14 @@ bool RewriteAstBlock(std::shared_ptr<GlslAstNode>& block) {
     if (child->type == GlslAstType::kIf) {
       bool if_has_return = ContainsReturnInAst(child);
       if (if_has_return) {
-        // Rewrite returns inside true and false branches
+        // Rewrite returns inside true branch
         auto true_block = std::make_shared<GlslAstNode>();
         true_block->type = GlslAstType::kBlock;
         true_block->children = std::move(child->children);
         RewriteAstBlock(true_block);
         child->children = std::move(true_block->children);
 
+        // Rewrite returns inside false branch if present
         if (!child->else_children.empty()) {
           auto false_block = std::make_shared<GlslAstNode>();
           false_block->type = GlslAstType::kBlock;
@@ -310,7 +344,7 @@ bool RewriteAstBlock(std::shared_ptr<GlslAstNode>& block) {
 
         new_children.push_back(child);
 
-        // Wrap all subsequent siblings in 'if (!_impeller_returned)'
+        // Wrap all subsequent sibling statements in 'if (!_impeller_returned)'
         if (i + 1 < block->children.size()) {
           auto guard_if = std::make_shared<GlslAstNode>();
           guard_if->type = GlslAstType::kIf;
@@ -328,8 +362,18 @@ bool RewriteAstBlock(std::shared_ptr<GlslAstNode>& block) {
         }
 
         modified = true;
-        break;  // All subsequent statements were consumed into the guard_if
+        break;  // Remaining sibling statements were packed into guard_if
       }
+    }
+
+    // Recurse into nested blocks / loops
+    if (child->type == GlslAstType::kLoop ||
+        child->type == GlslAstType::kBlock) {
+      auto child_block = std::make_shared<GlslAstNode>();
+      child_block->type = GlslAstType::kBlock;
+      child_block->children = std::move(child->children);
+      RewriteAstBlock(child_block);
+      child->children = std::move(child_block->children);
     }
 
     new_children.push_back(child);
@@ -354,6 +398,7 @@ void EmitGlslAst(const std::shared_ptr<GlslAstNode>& node,
       out += pad + "return;\n";
       break;
     case GlslAstType::kIf:
+    case GlslAstType::kLoop:
       out += pad + node->header + "\n" + pad + "{\n";
       for (const auto& child : node->children) {
         EmitGlslAst(child, out, indent + 1);
@@ -367,7 +412,6 @@ void EmitGlslAst(const std::shared_ptr<GlslAstNode>& node,
         out += pad + "}\n";
       }
       break;
-    case GlslAstType::kLoop:
     case GlslAstType::kBlock:
       for (const auto& child : node->children) {
         EmitGlslAst(child, out, indent);
@@ -377,15 +421,33 @@ void EmitGlslAst(const std::shared_ptr<GlslAstNode>& node,
 }
 
 std::string SanitizeEarlyReturnsForGLESFragmentShader(std::string source) {
-  constexpr std::string_view kMainPattern = "\nvoid main()\n{";
-  size_t main_pos = source.find(kMainPattern);
+  // Find 'void main('
+  size_t main_pos = source.find("void main(");
   if (main_pos == std::string::npos) {
     return source;
   }
 
-  size_t body_start = main_pos + kMainPattern.size();
-  size_t body_end = source.rfind('}');
-  if (body_end == std::string::npos || body_end <= body_start) {
+  size_t body_start = source.find('{', main_pos);
+  if (body_start == std::string::npos) {
+    return source;
+  }
+  body_start++;  // Move inside '{'
+
+  // Find matching closing brace '}' for main()
+  int depth = 1;
+  size_t body_end = body_start;
+  for (; body_end < source.size(); ++body_end) {
+    if (source[body_end] == '{') {
+      depth++;
+    } else if (source[body_end] == '}') {
+      depth--;
+      if (depth == 0) {
+        break;
+      }
+    }
+  }
+
+  if (body_end <= body_start || depth != 0) {
     return source;
   }
 
