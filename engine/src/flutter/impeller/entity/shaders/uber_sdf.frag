@@ -74,6 +74,10 @@ uniform FragInfo {
   ///   1: Bevel
   ///   2: Round
   float stroke_join;
+
+  // --- Superellipse Parameters ---
+  /// The geometric offset 'c' used to connect the two octants of each quadrant.
+  float octant_offset_c;
 }
 frag_info;
 
@@ -125,12 +129,10 @@ float distanceFromRoundedSuperellipse(vec2 p,
                                       vec2 radii,
                                       vec2 angle_span,
                                       vec2 circle_center_top,
-                                      vec2 circle_center_right) {
+                                      vec2 circle_center_right,
+                                      float c) {
   // Do work in the first quadrant to simply things.
   p = abs(p);
-
-  // Transition line offset dividing top and right octants.
-  float c = size.x - size.y;
 
   // Declare all RSE params for a single octant.
   float se_degree, span, radius, axis_length;
@@ -245,7 +247,7 @@ vec2 filledSDF(vec2 p) {
     sdf = distanceFromRoundedSuperellipse(
         p, frag_info.superellipse_degree, frag_info.size, frag_info.radii.xy,
         frag_info.angle_span, frag_info.circle_center_top,
-        frag_info.circle_center_right);
+        frag_info.circle_center_right, frag_info.octant_offset_c);
     pixel_size = pixelSize(sdf);
   }
   return vec2(sdf, pixel_size);

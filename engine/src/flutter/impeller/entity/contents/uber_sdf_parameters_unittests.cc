@@ -169,6 +169,10 @@ TEST(UberSDFParametersTest, MakeRoundedSuperellipse) {
         params.angle_span.y,
         round_superellipse_params.top_right.right.circle_max_angle.radians);
 
+    EXPECT_EQ(params.octant_offset_c,
+              round_superellipse_params.top_right.top.se_a -
+                  round_superellipse_params.top_right.right.se_a);
+
     EXPECT_EQ(params.circle_center_top,
               round_superellipse_params.top_right.top.circle_center);
     EXPECT_EQ(params.circle_center_right,
@@ -200,6 +204,8 @@ TEST(UberSDFParametersTest, MakeRectangularRoundedSuperellipse) {
     EXPECT_EQ(params.center, Point(60, 120));
     EXPECT_EQ(params.size, Point(50, 100));
     EXPECT_FALSE(params.stroke.has_value());
+
+    EXPECT_EQ(params.octant_offset_c, -50.0f);
   }
 }
 
