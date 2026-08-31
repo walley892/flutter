@@ -159,37 +159,57 @@ void DlDeferredImageGPUImpeller::ImageWrapper::SnapshotDisplayList(
       fml::MakeCopyable([weak_this = weak_from_this(),
                          content = std::move(content)]() mutable {
         TRACE_EVENT0("flutter", "SnapshotDisplayList (impeller)");
+        FML_LOG(ERROR)
+            << "[TRACE] DlDeferredImageGPUImpeller::SnapshotDisplayList on "
+               "raster thread";
         auto wrapper = weak_this.lock();
         if (!wrapper) {
+          FML_LOG(ERROR)
+              << "[TRACE] DlDeferredImageGPUImpeller wrapper is null";
           return;
         }
         auto snapshot_delegate = wrapper->snapshot_delegate_;
         if (!snapshot_delegate) {
+          FML_LOG(ERROR)
+              << "[TRACE] DlDeferredImageGPUImpeller snapshot_delegate is null";
           return;
         }
 
         sk_sp<DisplayList> display_list;
 
         if (std::holds_alternative<sk_sp<DisplayList>>(content)) {
+          FML_LOG(ERROR)
+              << "[TRACE] DlDeferredImageGPUImpeller content is DisplayList";
           display_list = std::get<sk_sp<DisplayList>>(std::move(content));
         } else if (std::holds_alternative<std::unique_ptr<LayerTree>>(
                        content)) {
           std::unique_ptr<LayerTree> layer_tree =
               std::get<std::unique_ptr<LayerTree>>(std::move(content));
           auto aiks_context = snapshot_delegate->GetAiksContext();
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUImpeller content is "
+                            "LayerTree. aiks_context="
+                         << aiks_context.get();
           display_list = layer_tree->Flatten(
               DlRect::MakeWH(wrapper->size_.width, wrapper->size_.height),
               snapshot_delegate->GetTextureRegistry(),
               /*gr_context=*/nullptr, aiks_context.get());
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUImpeller "
+                            "LayerTree::Flatten completed";
         }
 
+        FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUImpeller calling "
+                          "MakeImpellerSnapshotSync";
         auto texture = snapshot_delegate->MakeImpellerSnapshotSync(
             display_list, wrapper->size_, wrapper->pixel_format_);
         if (!texture) {
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUImpeller "
+                            "MakeImpellerSnapshotSync returned null texture";
           std::scoped_lock lock(wrapper->error_mutex_);
           wrapper->error_ = "Failed to create snapshot.";
           return;
         }
+        FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUImpeller "
+                          "MakeImpellerSnapshotSync succeeded";
         std::atomic_store(&wrapper->texture_, texture);
       }));
 }

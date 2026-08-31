@@ -49,6 +49,8 @@ Dart_Handle Scene::toImageSync(uint32_t width,
                                uint32_t height,
                                Dart_Handle raw_image_handle) {
   TRACE_EVENT0("flutter", "Scene::toImageSync");
+  FML_LOG(ERROR) << "[TRACE] Scene::toImageSync called: width=" << width
+                 << ", height=" << height;
 
   if (!valid()) {
     return tonic::ToDart("Scene has been disposed.");
@@ -77,8 +79,11 @@ static sk_sp<DlImage> CreateDeferredImage(
     fml::TaskRunnerAffineWeakPtr<SnapshotDelegate> snapshot_delegate,
     fml::RefPtr<fml::TaskRunner> raster_task_runner,
     const fml::RefPtr<SkiaUnrefQueue>& unref_queue) {
+  FML_LOG(ERROR) << "[TRACE] CreateDeferredImage called: impeller=" << impeller;
 #if IMPELLER_SUPPORTS_RENDERING
   if (impeller) {
+    FML_LOG(ERROR)
+        << "[TRACE] CreateDeferredImage -> Creating DlDeferredImageGPUImpeller";
     return DlDeferredImageGPUImpeller::Make(std::move(layer_tree),
                                             std::move(snapshot_delegate),
                                             std::move(raster_task_runner));
@@ -89,6 +94,8 @@ static sk_sp<DlImage> CreateDeferredImage(
   FML_LOG(FATAL) << "Impeller opt-out unavailable.";
   return nullptr;
 #else   // SLIMPELLER
+  FML_LOG(ERROR)
+      << "[TRACE] CreateDeferredImage -> Creating DlDeferredImageGPUSkia";
   const auto& frame_size = layer_tree->frame_size();
   const SkImageInfo image_info =
       SkImageInfo::Make(frame_size.width, frame_size.height,

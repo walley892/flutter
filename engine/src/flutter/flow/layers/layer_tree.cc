@@ -150,6 +150,12 @@ sk_sp<DisplayList> LayerTree::Flatten(
     GrDirectContext* gr_context,
     impeller::AiksContext* aiks_context) {
   TRACE_EVENT0("flutter", "LayerTree::Flatten");
+  FML_LOG(ERROR) << "[TRACE] LayerTree::Flatten called: aiks_context="
+                 << aiks_context
+                 << ", impeller_enabled=" << (aiks_context != nullptr)
+                 << ", bounds=[" << bounds.GetX() << ", " << bounds.GetY()
+                 << ", " << bounds.GetWidth() << ", " << bounds.GetHeight()
+                 << "]";
 
   DisplayListBuilder builder(bounds);
 
@@ -201,7 +207,10 @@ sk_sp<DisplayList> LayerTree::Flatten(
 
     // The needs painting flag may be set after the preroll. So check it after.
     if (root_layer_->needs_painting(paint_context)) {
+      FML_LOG(ERROR) << "[TRACE] LayerTree::Flatten calling root_layer_->Paint";
       root_layer_->Paint(paint_context);
+      FML_LOG(ERROR)
+          << "[TRACE] LayerTree::Flatten root_layer_->Paint finished";
     }
   }
 

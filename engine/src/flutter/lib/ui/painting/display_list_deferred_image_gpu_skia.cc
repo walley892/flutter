@@ -158,25 +158,38 @@ void DlDeferredImageGPUSkia::ImageWrapper::SnapshotDisplayList(
       raster_task_runner_,
       fml::MakeCopyable([weak_this = weak_from_this(),
                          layer_tree = std::move(layer_tree)]() mutable {
+        FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUSkia::SnapshotDisplayList "
+                          "on raster thread";
         auto wrapper = weak_this.lock();
         if (!wrapper) {
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUSkia wrapper is null";
           return;
         }
         auto snapshot_delegate = wrapper->snapshot_delegate_;
         if (!snapshot_delegate) {
+          FML_LOG(ERROR)
+              << "[TRACE] DlDeferredImageGPUSkia snapshot_delegate is null";
           return;
         }
         if (layer_tree) {
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUSkia flattening "
+                            "layer_tree (aiks_context NOT passed)";
           auto display_list =
               layer_tree->Flatten(DlRect::MakeWH(wrapper->image_info_.width(),
                                                  wrapper->image_info_.height()),
                                   snapshot_delegate->GetTextureRegistry(),
                                   snapshot_delegate->GetGrContext());
+          FML_LOG(ERROR)
+              << "[TRACE] DlDeferredImageGPUSkia LayerTree::Flatten completed";
           wrapper->display_list_ = std::move(display_list);
         }
+        FML_LOG(ERROR)
+            << "[TRACE] DlDeferredImageGPUSkia calling MakeSkiaGpuImage";
         auto result = snapshot_delegate->MakeSkiaGpuImage(
             wrapper->display_list_, wrapper->image_info_);
         if (result->texture.isValid()) {
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUSkia MakeSkiaGpuImage "
+                            "returned valid texture";
           wrapper->texture_ = result->texture;
           wrapper->context_ = std::move(result->context);
           wrapper->texture_registry_ =
@@ -184,8 +197,13 @@ void DlDeferredImageGPUSkia::ImageWrapper::SnapshotDisplayList(
           wrapper->texture_registry_->RegisterContextListener(
               reinterpret_cast<uintptr_t>(wrapper.get()), weak_this);
         } else if (result->image) {
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUSkia MakeSkiaGpuImage "
+                            "returned image";
           wrapper->image_ = std::move(result->image);
         } else {
+          FML_LOG(ERROR) << "[TRACE] DlDeferredImageGPUSkia MakeSkiaGpuImage "
+                            "returned error: "
+                         << result->error;
           std::scoped_lock lock(wrapper->error_mutex_);
           wrapper->error_ = result->error;
         }

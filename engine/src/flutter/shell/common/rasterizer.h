@@ -712,12 +712,23 @@ class Rasterizer final : public SnapshotDelegate,
   std::shared_ptr<impeller::AiksContext> GetAiksContext() const override {
 #if IMPELLER_SUPPORTS_RENDERING
     if (surface_) {
-      return surface_->GetAiksContext();
+      auto ctx = surface_->GetAiksContext();
+      FML_LOG(ERROR) << "[TRACE] Rasterizer::GetAiksContext returning "
+                        "surface_->GetAiksContext(): "
+                     << ctx.get();
+      return ctx;
     }
     if (auto context = impeller_context_->GetContext()) {
+      FML_LOG(ERROR) << "[TRACE] Rasterizer::GetAiksContext creating "
+                        "AiksContext from impeller_context_";
       return std::make_shared<impeller::AiksContext>(
           context, impeller::TypographerContextSkia::Make());
     }
+    FML_LOG(ERROR) << "[TRACE] Rasterizer::GetAiksContext: surface_ is null "
+                      "and impeller_context_->GetContext() is null";
+#else
+    FML_LOG(ERROR) << "[TRACE] Rasterizer::GetAiksContext: "
+                      "IMPELLER_SUPPORTS_RENDERING is NOT defined";
 #endif
     return nullptr;
   }

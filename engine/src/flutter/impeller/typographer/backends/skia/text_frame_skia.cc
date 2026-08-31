@@ -44,9 +44,18 @@ static Rect ToRect(const SkRect& rect) {
 
 std::shared_ptr<TextFrame> MakeTextFrameFromTextBlobSkia(
     const sk_sp<SkTextBlob>& blob) {
+  if (!blob) {
+    FML_LOG(ERROR)
+        << "[TRACE] MakeTextFrameFromTextBlobSkia called with null blob";
+    return nullptr;
+  }
+  FML_LOG(ERROR)
+      << "[TRACE] MakeTextFrameFromTextBlobSkia called with valid blob";
   bool has_color = false;
   std::vector<TextRun> runs;
-  for (SkTextBlobRunIterator run(blob.get()); !run.done(); run.next()) {
+  int run_index = 0;
+  for (SkTextBlobRunIterator run(blob.get()); !run.done();
+       run.next(), ++run_index) {
     SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(run.font());
     SkBulkGlyphMetricsAndPaths paths{strikeSpec};
     SkSpan<const SkGlyph*> glyphs =
@@ -60,6 +69,12 @@ std::shared_ptr<TextFrame> MakeTextFrameFromTextBlobSkia(
     if (run.font().isSubpixel() && run.font().isBaselineSnap() && !has_color) {
       alignment = AxisAlignment::kX;
     }
+
+    FML_LOG(ERROR) << "[TRACE] MakeTextFrameFromTextBlobSkia run[" << run_index
+                   << "] positioning=" << run.positioning()
+                   << " (kFull_Positioning="
+                   << SkTextBlobRunIterator::kFull_Positioning
+                   << "), glyphCount=" << run.glyphCount();
 
     switch (run.positioning()) {
       case SkTextBlobRunIterator::kFull_Positioning: {
@@ -82,10 +97,15 @@ std::shared_ptr<TextFrame> MakeTextFrameFromTextBlobSkia(
         break;
       }
       default:
-        FML_DLOG(ERROR) << "Unimplemented.";
+        FML_LOG(ERROR) << "[TRACE] MakeTextFrameFromTextBlobSkia hit "
+                          "unimplemented positioning: "
+                       << run.positioning() << ", skipping run";
         continue;
     }
   }
+  FML_LOG(ERROR)
+      << "[TRACE] MakeTextFrameFromTextBlobSkia finished with runs.size()="
+      << runs.size();
   return std::make_shared<TextFrame>(
       runs, ToRect(blob->bounds()), has_color,
       [blob]() -> fml::StatusOr<flutter::DlPath> {

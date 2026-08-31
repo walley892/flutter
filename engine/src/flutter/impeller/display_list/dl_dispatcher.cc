@@ -855,9 +855,16 @@ void DlDispatcherBase::drawText(const std::shared_ptr<flutter::DlText>& text,
   AUTO_DEPTH_WATCHER(1u);
 
   auto text_frame = text->GetTextFrame();
+  FML_LOG(ERROR) << "[TRACE] DlDispatcherBase::drawText called at (" << x
+                 << ", " << y << "), text=" << text.get()
+                 << ", text_frame=" << text_frame.get();
 
   // When running with Impeller enabled Skia text blobs are converted to
   // Impeller text frames in paragraph_skia.cc
+  if (text_frame == nullptr) {
+    FML_LOG(ERROR) << "[TRACE] FATAL: text_frame is NULL! About to fail "
+                      "FML_CHECK at line 861!";
+  }
   FML_CHECK(text_frame != nullptr);
   GetCanvas().DrawTextFrame(text_frame,             //
                             impeller::Point{x, y},  //
@@ -1095,7 +1102,12 @@ void FirstPassDispatcher::drawText(const std::shared_ptr<flutter::DlText>& text,
                                    DlScalar y) {
   GlyphProperties properties;
   auto text_frame = text->GetTextFrame();
+  FML_LOG(ERROR) << "[TRACE] FirstPassDispatcher::drawText called at (" << x
+                 << ", " << y << "), text=" << text.get()
+                 << ", text_frame=" << text_frame.get();
   if (text_frame == nullptr) {
+    FML_LOG(ERROR) << "[TRACE] FirstPassDispatcher::drawText: text_frame is "
+                      "NULL, silently returning";
     return;
   }
 
@@ -1272,13 +1284,19 @@ std::shared_ptr<Texture> DisplayListToTexture(
     );
   }
   if (!target.IsValid()) {
+    FML_LOG(ERROR) << "[TRACE] DisplayListToTexture target is invalid!";
     return nullptr;
   }
 
+  FML_LOG(ERROR) << "[TRACE] DisplayListToTexture starting FirstPassDispatcher "
+                    "dispatch, size=["
+                 << size.width << "x" << size.height << "]";
   DlIRect cull_rect = DlIRect::MakeWH(size.width, size.height);
   impeller::FirstPassDispatcher collector(
       context.GetContentContext(), impeller::Matrix(), Rect::MakeSize(size));
   display_list->Dispatch(collector, cull_rect);
+  FML_LOG(ERROR) << "[TRACE] DisplayListToTexture FirstPassDispatcher dispatch "
+                    "completed. Starting CanvasDlDispatcher";
   impeller::CanvasDlDispatcher impeller_dispatcher(
       context.GetContentContext(),               //
       target,                                    //
@@ -1300,7 +1318,11 @@ std::shared_ptr<Texture> DisplayListToTexture(
     context.GetContext()->DisposeThreadLocalCachedResources();
   });
 
+  FML_LOG(ERROR)
+      << "[TRACE] DisplayListToTexture dispatching to CanvasDlDispatcher...";
   display_list->Dispatch(impeller_dispatcher, cull_rect);
+  FML_LOG(ERROR) << "[TRACE] DisplayListToTexture CanvasDlDispatcher dispatch "
+                    "completed successfully!";
   impeller_dispatcher.FinishRecording();
 
   return target.GetRenderTargetTexture();

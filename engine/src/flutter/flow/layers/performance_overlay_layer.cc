@@ -53,13 +53,24 @@ void VisualizeStopWatch(DlCanvas* canvas,
     // Historically SK_ColorGRAY (== 0xFF888888) was used here
     DlPaint paint(DlColor(0xFF888888));
 #ifdef IMPELLER_SUPPORTS_RENDERING
+    FML_LOG(ERROR)
+        << "[TRACE] VisualizeStopWatch label=" << label_prefix
+        << ", IMPELLER_SUPPORTS_RENDERING is defined, impeller_enabled="
+        << impeller_enabled;
     if (impeller_enabled) {
+      FML_LOG(ERROR)
+          << "[TRACE] VisualizeStopWatch -> drawing with DlTextImpeller";
       canvas->DrawText(
           DlTextImpeller::Make(impeller::MakeTextFrameFromTextBlobSkia(text)),
           x + label_x, y + height + label_y, paint);
       return;
     }
+#else
+    FML_LOG(ERROR) << "[TRACE] VisualizeStopWatch label=" << label_prefix
+                   << ", IMPELLER_SUPPORTS_RENDERING is NOT defined";
 #endif  // IMPELLER_SUPPORTS_RENDERING
+    FML_LOG(ERROR)
+        << "[TRACE] VisualizeStopWatch -> falling back to DlTextSkia";
     canvas->DrawText(DlTextSkia::Make(text), x + label_x, y + height + label_y,
                      paint);
   }
@@ -125,6 +136,9 @@ void PerformanceOverlayLayer::Diff(DiffContext* context,
 }
 
 void PerformanceOverlayLayer::Paint(PaintContext& context) const {
+  FML_LOG(ERROR)
+      << "[TRACE] PerformanceOverlayLayer::Paint called: impeller_enabled="
+      << context.impeller_enabled << ", options_=" << options_;
   const int padding = 8;
 
   if (!options_) {

@@ -72,23 +72,35 @@ std::shared_ptr<impeller::Texture> DoMakeRasterSnapshot(
     DlISize size,
     const SnapshotController::Delegate& delegate,
     SnapshotPixelFormat pixel_format) {
+  FML_LOG(ERROR) << "[TRACE] DoMakeRasterSnapshot called: size=[" << size.width
+                 << "x" << size.height << "]";
   // Ensure that the current thread has a rendering context. This must be done
   // before calling GetAiksContext because constructing the AiksContext may
   // invoke graphics APIs.
   std::unique_ptr<Surface> pbuffer_surface;
   std::unique_ptr<GLContextResult> context_result;
   if (delegate.GetSurface()) {
+    FML_LOG(ERROR)
+        << "[TRACE] DoMakeRasterSnapshot delegate.GetSurface() is present";
     context_result = delegate.GetSurface()->MakeRenderContextCurrent();
   } else if (delegate.GetSnapshotSurfaceProducer()) {
+    FML_LOG(ERROR) << "[TRACE] DoMakeRasterSnapshot "
+                      "delegate.GetSnapshotSurfaceProducer() is present";
     pbuffer_surface =
         delegate.GetSnapshotSurfaceProducer()->CreateSnapshotSurface();
     if (pbuffer_surface) {
       context_result = pbuffer_surface->MakeRenderContextCurrent();
     }
+  } else {
+    FML_LOG(ERROR) << "[TRACE] DoMakeRasterSnapshot: neither GetSurface() nor "
+                      "GetSnapshotSurfaceProducer() is present";
   }
 
-  return DoMakeRasterSnapshot(display_list, size, delegate.GetAiksContext(),
-                              pixel_format);
+  auto aiks_ctx = delegate.GetAiksContext();
+  FML_LOG(ERROR)
+      << "[TRACE] DoMakeRasterSnapshot: delegate.GetAiksContext() returned: "
+      << aiks_ctx.get();
+  return DoMakeRasterSnapshot(display_list, size, aiks_ctx, pixel_format);
 }
 
 std::shared_ptr<impeller::Texture> DoMakeRasterSnapshot(
