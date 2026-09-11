@@ -19,6 +19,7 @@ enum class UberSDFShape {
   kRect,
   kCircle,
   kRRect,
+  kLine,
   kRSE,
 };
 

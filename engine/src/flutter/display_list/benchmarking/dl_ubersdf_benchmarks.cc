@@ -53,6 +53,9 @@ void DrawShape(DisplayListBuilder& builder,
     case UberSDFShape::kRRect:
       builder.DrawRoundRect(DlRoundRect::MakeRectXY(bounds, 8.0f, 8.0f), paint);
       break;
+    case UberSDFShape::kLine:
+      builder.DrawLine(pos, DlPoint(pos.x + size, pos.y + size), paint);
+      break;
     case UberSDFShape::kRSE:
       builder.DrawRoundSuperellipse(
           DlRoundSuperellipse::MakeRectXY(bounds, 8.0f, 8.0f), paint);
@@ -89,6 +92,12 @@ void BM_UberSDF_Homogeneous(benchmark::State& state,
 
   auto display_list = builder.Build();
   state.counters["DrawCallCount"] = count;
+  if (backend_type == BackendType::kImpellerMetalSDF &&
+      shape != UberSDFShape::kRSE) {
+    state.counters["EstimatedGpuDraws"] = (count + 511) / 512;
+  } else {
+    state.counters["EstimatedGpuDraws"] = count;
+  }
 
   size_t items_processed = 0;
   for ([[maybe_unused]] auto _ : state) {
@@ -330,6 +339,24 @@ void BM_UberSDF_BatchBreaking(benchmark::State& state,
 
   auto display_list = builder.Build();
   state.counters["DrawCallCount"] = count;
+  if (backend_type == BackendType::kImpellerMetalSDF) {
+    switch (break_type) {
+      case BatchBreakType::kUnbroken:
+      case BatchBreakType::kSaveRestoreOnly:
+      case BatchBreakType::kTransformChurn:
+        state.counters["EstimatedGpuDraws"] = (count + 511) / 512;
+        break;
+      case BatchBreakType::kClipStackEvery16:
+        state.counters["EstimatedGpuDraws"] = (count + 15) / 16;
+        break;
+      case BatchBreakType::kClipStackEveryOp:
+      case BatchBreakType::kBlendModeShift:
+        state.counters["EstimatedGpuDraws"] = count;
+        break;
+    }
+  } else {
+    state.counters["EstimatedGpuDraws"] = count;
+  }
 
   size_t items_processed = 0;
   for ([[maybe_unused]] auto _ : state) {
@@ -347,6 +374,7 @@ void BM_UberSDF_BatchBreaking(benchmark::State& state,
                     BackendType::k##BACKEND,                            \
                     UberSDFShape::k##SHAPE,                             \
                     UberSDFStyle::k##STYLE)                             \
+      ->Arg(10)                                                         \
       ->Arg(100)                                                        \
       ->Arg(1000)                                                       \
       ->Arg(10000)                                                      \
@@ -357,6 +385,7 @@ void BM_UberSDF_BatchBreaking(benchmark::State& state,
   BENCHMARK_CAPTURE(BM_UberSDF_Heterogeneous, NAME/BACKEND,             \
                     BackendType::k##BACKEND,                            \
                     HeteroMixMode::k##MODE)                             \
+      ->Arg(10)                                                         \
       ->Arg(100)                                                        \
       ->Arg(1000)                                                       \
       ->Arg(10000)                                                      \
@@ -367,6 +396,7 @@ void BM_UberSDF_BatchBreaking(benchmark::State& state,
   BENCHMARK_CAPTURE(BM_UberSDF_Shading, NAME/BACKEND,                   \
                     BackendType::k##BACKEND,                            \
                     ShadingType::k##TYPE)                               \
+      ->Arg(10)                                                         \
       ->Arg(100)                                                        \
       ->Arg(1000)                                                       \
       ->Arg(10000)                                                      \
@@ -377,6 +407,7 @@ void BM_UberSDF_BatchBreaking(benchmark::State& state,
   BENCHMARK_CAPTURE(BM_UberSDF_BatchBreaking, NAME/BACKEND,              \
                     BackendType::k##BACKEND,                            \
                     BatchBreakType::k##TYPE)                            \
+      ->Arg(10)                                                         \
       ->Arg(100)                                                        \
       ->Arg(1000)                                                       \
       ->Arg(10000)                                                      \
@@ -390,6 +421,7 @@ void BM_UberSDF_BatchBreaking(benchmark::State& state,
   REGISTER_UBERSDF_HOMOGENEOUS(Circle_Stroke, BACKEND, Circle, Stroke)                \
   REGISTER_UBERSDF_HOMOGENEOUS(RRect_Fill, BACKEND, RRect, Fill)                      \
   REGISTER_UBERSDF_HOMOGENEOUS(RRect_Stroke, BACKEND, RRect, Stroke)                  \
+  REGISTER_UBERSDF_HOMOGENEOUS(Line_Stroke, BACKEND, Line, Stroke)                    \
   REGISTER_UBERSDF_HOMOGENEOUS(RSE_Fill, BACKEND, RSE, Fill)                          \
   REGISTER_UBERSDF_HOMOGENEOUS(RSE_Stroke, BACKEND, RSE, Stroke)                      \
   REGISTER_UBERSDF_HETEROGENEOUS(AlternatingShapes_Fill, BACKEND, AlternatingShapes)  \
