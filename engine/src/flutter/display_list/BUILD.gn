@@ -317,6 +317,8 @@ if (enable_unittests) {
     sources = [
       "benchmarking/dl_benchmarks.cc",
       "benchmarking/dl_benchmarks.h",
+      "benchmarking/dl_ubersdf_benchmarks.cc",
+      "benchmarking/dl_ubersdf_benchmarks.h",
     ]
 
     defines = [ "DISPLAY_LIST_BENCHMARK_ALL_OPS" ]
@@ -329,6 +331,19 @@ if (enable_unittests) {
     sources = [
       "benchmarking/dl_benchmarks.cc",
       "benchmarking/dl_benchmarks.h",
+      "benchmarking/dl_ubersdf_benchmarks.cc",
+      "benchmarking/dl_ubersdf_benchmarks.h",
+    ]
+
+    deps = [ ":display_list_benchmarks_source" ]
+  }
+
+  executable("ubersdf_benchmarks") {
+    testonly = true
+
+    sources = [
+      "benchmarking/dl_ubersdf_benchmarks.cc",
+      "benchmarking/dl_ubersdf_benchmarks.h",
     ]
 
     deps = [ ":display_list_benchmarks_source" ]
