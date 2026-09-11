@@ -97,6 +97,8 @@ bool UberSDFBatcher::AddShape(const Paint& paint,
   instance.translation_and_depth[0] = m[12];  // tx
   instance.translation_and_depth[1] = m[13];  // ty
   instance.translation_and_depth[2] = Entity::GetShaderClipDepth(shape_depth);
+  instance.translation_and_depth[3] =
+      params.stroke ? params.stroke->width : 0.0f;
 
   uint32_t flags = 0;
   if (params.stroke) {
@@ -108,12 +110,13 @@ bool UberSDFBatcher::AddShape(const Paint& paint,
       flags |= (2 << 1);
     }
   }
-  instance.translation_and_depth[3] = static_cast<float>(flags);
 
-  instance.size_and_stroke[0] = params.size.x;
-  instance.size_and_stroke[1] = params.size.y;
-  instance.size_and_stroke[2] = params.stroke ? params.stroke->width : 0.0f;
-  instance.size_and_stroke[3] = UberSDFParameters::kAntialiasPixels;
+  instance.half_size[0] = params.size.x;
+  instance.half_size[1] = params.size.y;
+  instance.flags = static_cast<float>(flags);
+  Color color = params.color;
+  color.alpha *= canvas_.GetDistributedOpacity();
+  instance.color = UberSDFInstanceData::PackColorRGBA8(color);
 
   // Unified Radii Mapping:
   if (params.type == UberSDFParameters::Type::kCircle) {
@@ -132,18 +135,6 @@ bool UberSDFBatcher::AddShape(const Paint& paint,
     instance.radii[2] = params.radii.z;
     instance.radii[3] = params.radii.w;
   }
-
-  Color color = params.color;
-  color.alpha *= canvas_.GetDistributedOpacity();
-  instance.color[0] = color.red;
-  instance.color[1] = color.green;
-  instance.color[2] = color.blue;
-  instance.color[3] = color.alpha;
-
-  instance.extra_params[0] = static_cast<float>(tier);
-  instance.extra_params[1] = 0.0f;
-  instance.extra_params[2] = params.stroke ? params.stroke->miter_limit : 4.0f;
-  instance.extra_params[3] = 0.0f;
 
   if (instances_.empty()) {
     current_key_ = candidate_key;

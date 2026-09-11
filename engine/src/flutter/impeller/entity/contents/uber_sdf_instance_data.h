@@ -5,7 +5,9 @@
 #ifndef FLUTTER_IMPELLER_ENTITY_CONTENTS_UBER_SDF_INSTANCE_DATA_H_
 #define FLUTTER_IMPELLER_ENTITY_CONTENTS_UBER_SDF_INSTANCE_DATA_H_
 
+#include <algorithm>
 #include <cstdint>
+#include "impeller/geometry/color.h"
 
 namespace impeller {
 
@@ -14,44 +16,47 @@ enum class UberSDFTier : uint32_t {
   kComplex = 1,   // Oval, Rounded Superellipse (Fallback or standalone)
 };
 
+/// @brief Cache-line aligned (64 bytes) per-instance data for UberSDF
+/// instancing.
+///
+/// Exactly 64 bytes in size and 16-byte aligned, matching the L1 cache line
+/// size of modern mobile and desktop GPUs.
 struct alignas(16) UberSDFInstanceData {
-  // Slot 0: 2D Affine Basis Matrix (16 bytes)
-  // Maps local unit dimensions into pass space (scale, rotation, shear).
-  // basis[0] = m00, basis[1] = m01 (basis X)
-  // basis[2] = m10, basis[3] = m11 (basis Y)
+  // Slot 0: 2D Affine Linear Basis Matrix (16 bytes)
+  // [m00, m01, m10, m11]
   float basis[4];
 
-  // Slot 1: Effective 2D Affine Translation & Depth (16 bytes)
-  // [tx_effective, ty_effective, depth, flags]
-  // tx/ty: entity translation with shape center already folded in.
-  // depth: clip depth scaled by Entity::kDepthEpsilon.
-  // flags: bit 0 = stroked (0=fill, 1=stroke), bit 1-2 = join style.
+  // Slot 1: Effective 2D Affine Translation, Depth, and Stroke Width (16 bytes)
+  // [tx_effective, ty_effective, depth_normalized, stroke_width]
   float translation_and_depth[4];
 
-  // Slot 2: Local Half-Size & Stroke Dimensions (16 bytes)
-  // [half_width, half_height, stroke_width, antialias_pixels]
-  float size_and_stroke[4];
+  // Slot 2: Local Dimensions, Flags, and Packed RGBA8 Color (16 bytes)
+  // [half_width, half_height, flags (as float), packed_color (as uint32)]
+  float half_size[2];
+  float flags;
+  uint32_t color;
 
-  // Slot 3: Corner Radii (16 bytes)
+  // Slot 3: Quadrant Corner Radii (16 bytes)
   // [r_top_left, r_top_right, r_bottom_right, r_bottom_left]
-  // Rect: (0, 0, 0, 0)
-  // Circle: (radius, radius, radius, radius)
-  // RRect: (r_tl, r_tr, r_br, r_bl)
   float radii[4];
 
-  // Slot 4: Premultiplied / Unpremultiplied RGBA Color (16 bytes)
-  // [red, green, blue, alpha]
-  float color[4];
-
-  // Slot 5: Pipeline & Gradient Control / Reserved (16 bytes)
-  // [tier, gradient_id, miter_limit, unused]
-  float extra_params[4];
+  static inline uint32_t PackColorRGBA8(const Color& c) {
+    uint32_t r =
+        static_cast<uint32_t>(std::clamp(c.red * 255.0f, 0.0f, 255.0f));
+    uint32_t g =
+        static_cast<uint32_t>(std::clamp(c.green * 255.0f, 0.0f, 255.0f));
+    uint32_t b =
+        static_cast<uint32_t>(std::clamp(c.blue * 255.0f, 0.0f, 255.0f));
+    uint32_t a =
+        static_cast<uint32_t>(std::clamp(c.alpha * 255.0f, 0.0f, 255.0f));
+    return (a << 24) | (b << 16) | (g << 8) | r;
+  }
 };
 
-static_assert(sizeof(UberSDFInstanceData) == 96,
-              "Instance size must be exactly 96 bytes");
+static_assert(sizeof(UberSDFInstanceData) == 64,
+              "UberSDFInstanceData must be exactly 64 bytes (1 cache line)");
 static_assert(alignof(UberSDFInstanceData) == 16,
-              "Instance alignment must be exactly 16 bytes");
+              "UberSDFInstanceData must be 16-byte aligned");
 
 }  // namespace impeller
 

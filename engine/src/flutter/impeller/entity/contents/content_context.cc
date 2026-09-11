@@ -559,21 +559,17 @@ CreateInstancedUberSDFFastpathPipelineDescriptor(const Context& context) {
   translate_slot.binding = 1;
   translate_slot.offset = offsetof(UberSDFInstanceData, translation_and_depth);
 
-  ShaderStageIOSlot size_stroke_slot = VS::kInputInstanceSizeStroke;
-  size_stroke_slot.binding = 1;
-  size_stroke_slot.offset = offsetof(UberSDFInstanceData, size_and_stroke);
+  ShaderStageIOSlot size_flags_color_slot = VS::kInputInstanceSizeFlagsColor;
+  size_flags_color_slot.binding = 1;
+  size_flags_color_slot.offset = offsetof(UberSDFInstanceData, half_size);
 
   ShaderStageIOSlot radii_slot = VS::kInputInstanceRadii;
   radii_slot.binding = 1;
   radii_slot.offset = offsetof(UberSDFInstanceData, radii);
 
-  ShaderStageIOSlot color_slot = VS::kInputInstanceColor;
-  color_slot.binding = 1;
-  color_slot.offset = offsetof(UberSDFInstanceData, color);
-
   const std::vector<ShaderStageIOSlot> io_slots = {
-      unit_pos_slot,    basis_slot, translate_slot,
-      size_stroke_slot, radii_slot, color_slot};
+      unit_pos_slot, basis_slot, translate_slot, size_flags_color_slot,
+      radii_slot};
 
   const std::vector<ShaderStageBufferLayout> layouts = {
       ShaderStageBufferLayout{.stride = sizeof(Point),

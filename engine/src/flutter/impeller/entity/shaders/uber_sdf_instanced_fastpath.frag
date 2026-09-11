@@ -27,13 +27,15 @@ float gammaCorrectedAlpha(float alpha, vec3 foreground_rgb) {
 }
 
 void main() {
-  // 1. Quadrant Corner Radius Selection (Branch-Free Ternary / Conditional Move):
+  // 1. Quadrant Corner Radius Selection (Branch-Free Ternary / Conditional
+  // Move):
   vec4 r = v_radii;
   r.xy = (v_position.x > 0.0) ? r.xy : r.zw;
   float radius = (v_position.y > 0.0) ? r.x : r.y;
 
   // 2. Zero-Branch Unified Analytical Distance Formula:
-  // Exactly evaluates Rectangles (r=0), Circles (b=r, r=r), and RRects without branching.
+  // Exactly evaluates Rectangles (r=0), Circles (b=r, r=r), and RRects without
+  // branching.
   vec2 q = abs(v_position) - v_half_size + radius;
   float sdf = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
 
@@ -54,7 +56,8 @@ void main() {
   }
 
   // 5. Antialiased Coverage:
-  float alpha = clamp(0.5 - sdf / max(v_aa_pixels * pixel_size, 1e-4), 0.0, 1.0);
+  float alpha =
+      clamp(0.5 - sdf / max(v_aa_pixels * pixel_size, 1e-4), 0.0, 1.0);
 
   // 6. Perceptual Gamma Correction:
   if (alpha < 1.0) {

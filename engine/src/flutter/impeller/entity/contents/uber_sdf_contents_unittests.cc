@@ -151,23 +151,22 @@ TEST(UberSDFContentsTest, AsBackgroundColorGradientReturnsNullopt) {
 }
 
 TEST(UberSDFContentsTest, UberSDFInstanceDataLayout) {
-  EXPECT_EQ(sizeof(UberSDFInstanceData), 96u);
+  EXPECT_EQ(sizeof(UberSDFInstanceData), 64u);
   EXPECT_EQ(alignof(UberSDFInstanceData), 16u);
 
   EXPECT_EQ(offsetof(UberSDFInstanceData, basis), 0u);
   EXPECT_EQ(offsetof(UberSDFInstanceData, translation_and_depth), 16u);
-  EXPECT_EQ(offsetof(UberSDFInstanceData, size_and_stroke), 32u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, half_size), 32u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, flags), 40u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, color), 44u);
   EXPECT_EQ(offsetof(UberSDFInstanceData, radii), 48u);
-  EXPECT_EQ(offsetof(UberSDFInstanceData, color), 64u);
-  EXPECT_EQ(offsetof(UberSDFInstanceData, extra_params), 80u);
 }
 
 TEST(UberSDFContentsTest, UberSDFBatchContentsLifecycle) {
   std::vector<UberSDFInstanceData> instances;
   for (int i = 0; i < 10; ++i) {
     UberSDFInstanceData instance = {};
-    instance.color[0] = 1.0f;
-    instance.color[3] = 1.0f;
+    instance.color = UberSDFInstanceData::PackColorRGBA8(Color::White());
     instances.push_back(instance);
   }
 

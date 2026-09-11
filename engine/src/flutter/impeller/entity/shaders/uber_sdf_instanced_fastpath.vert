@@ -12,12 +12,11 @@ frame_info;
 // Binding 0: Static unit quad geometry (mesh rate)
 in vec2 unit_position;  // Spans [-1.0, 1.0]
 
-// Binding 1: Packed instance attributes (instance rate)
+// Binding 1: Compact 64-byte instance attributes (instance rate)
 in vec4 instance_basis;              // [m00, m01, m10, m11]
-in vec4 instance_translation_depth;  // [tx, ty, depth, flags]
-in vec4 instance_size_stroke;        // [half_w, half_h, stroke_width, aa_pixels]
+in vec4 instance_translation_depth;  // [tx, ty, depth, stroke_width]
+in vec4 instance_size_flags_color;   // [half_w, half_h, flags, packed_color]
 in vec4 instance_radii;              // [r_tl, r_tr, r_br, r_bl]
-in vec4 instance_color;              // [r, g, b, a]
 
 out vec2 v_position;
 out vec2 v_half_size;
@@ -29,11 +28,11 @@ out float v_aa_pixels;
 out vec2 v_pixel_size;
 
 void main() {
-  vec2 half_size = instance_size_stroke.xy;
-  float stroke_width = instance_size_stroke.z;
-  float aa_pixels = instance_size_stroke.w;
-  float flags = instance_translation_depth.w;
+  vec2 half_size = instance_size_flags_color.xy;
+  float stroke_width = instance_translation_depth.w;
+  float flags = instance_size_flags_color.z;
   bool is_stroked = (int(flags) & 1) != 0;
+  float aa_pixels = 2.0;
 
   // 1. Analytical Device Pixel Size:
   // Derived directly from the affine basis matrix columns.
@@ -67,11 +66,18 @@ void main() {
   projected.z = instance_translation_depth.z * projected.w;
   gl_Position = projected;
 
-  // 6. Export Varyings:
+  // 6. Color Unpacking:
+#if defined(IMPELLER_TARGET_OPENGLES) && !defined(IMPELLER_TARGET_OPENGLES3)
+  v_color = vec4(1.0);
+#else
+  uint color_bits = floatBitsToUint(instance_size_flags_color.w);
+  v_color = unpackUnorm4x8(color_bits);
+#endif
+
+  // 7. Export Varyings:
   v_position = local_pos;
   v_half_size = half_size;
   v_radii = instance_radii;
-  v_color = instance_color;
   v_half_stroke = is_stroked ? (stroke_width * 0.5) : 0.0;
   v_stroke_flags = flags;
   v_aa_pixels = aa_pixels;
