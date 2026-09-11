@@ -273,8 +273,6 @@ class Canvas {
     return transform_stack_.back().distributed_opacity;
   }
 
-  void AdvanceDepth(size_t count);
-
   UberSDFBatcher* GetUberSDFBatcher() const { return sdf_batcher_.get(); }
 
   struct SaveLayerState {

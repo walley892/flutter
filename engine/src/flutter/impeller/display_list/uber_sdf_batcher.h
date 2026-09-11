@@ -31,7 +31,7 @@ class UberSDFBatcher {
   bool AddShape(const Paint& paint,
                 const UberSDFParameters& params,
                 const Matrix& transform,
-                uint32_t clip_depth,
+                uint32_t shape_depth,
                 const std::optional<Rect>& clip_coverage);
 
   // Flushes the accumulated batch to the current RenderPass.
@@ -45,11 +45,13 @@ class UberSDFBatcher {
   struct BatchKey {
     UberSDFTier tier = UberSDFTier::kFastpath;
     BlendMode blend_mode = BlendMode::kSrcOver;
+    size_t clip_height = 0;
     uint32_t clip_depth = 0;
     uintptr_t texture_id = 0;
 
     bool IsCompatible(const BatchKey& other) const {
       return tier == other.tier && blend_mode == other.blend_mode &&
+             clip_height == other.clip_height &&
              clip_depth == other.clip_depth && texture_id == other.texture_id;
     }
   };

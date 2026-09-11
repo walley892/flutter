@@ -510,13 +510,10 @@ void Canvas::Initialize(std::optional<Rect> cull_rect) {
   }
 }
 
-void Canvas::AdvanceDepth(size_t count) {
-  current_depth_ += count;
-  FML_DCHECK(current_depth_ <= transform_stack_.back().clip_depth)
-      << current_depth_ << " <=? " << transform_stack_.back().clip_depth;
-}
-
 void Canvas::Reset() {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
   current_depth_ = 0u;
   transform_stack_ = {};
 }
@@ -1790,6 +1787,9 @@ void Canvas::SkipUntilMatchingRestore(size_t total_content_depth) {
 }
 
 void Canvas::Save(uint32_t total_content_depth) {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
   if (IsSkipping()) {
     return SkipUntilMatchingRestore(total_content_depth);
   }
@@ -2325,6 +2325,11 @@ void Canvas::AddRenderSDFEntityToCurrentPass(
   if (sdf_batcher_ &&
       sdf_batcher_->AddShape(paint, params, transform, next_depth,
                              clip_coverage_stack_.CurrentClipCoverage())) {
+    if (!reuse_depth) {
+      ++current_depth_;
+    }
+    FML_DCHECK(current_depth_ <= transform_stack_.back().clip_depth)
+        << current_depth_ << " <=? " << transform_stack_.back().clip_depth;
     return;
   }
 

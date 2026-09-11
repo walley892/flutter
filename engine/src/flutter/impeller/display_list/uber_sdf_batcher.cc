@@ -21,7 +21,7 @@ UberSDFBatcher::~UberSDFBatcher() {
 bool UberSDFBatcher::AddShape(const Paint& paint,
                               const UberSDFParameters& params,
                               const Matrix& transform,
-                              uint32_t clip_depth,
+                              uint32_t shape_depth,
                               const std::optional<Rect>& clip_coverage) {
   // 1. Perspective check: 3D perspective triggers fallback to standalone draw.
   if (transform.HasPerspective2D()) {
@@ -54,7 +54,8 @@ bool UberSDFBatcher::AddShape(const Paint& paint,
   BatchKey candidate_key;
   candidate_key.tier = tier;
   candidate_key.blend_mode = paint.blend_mode;
-  candidate_key.clip_depth = clip_depth;
+  candidate_key.clip_height = canvas_.GetClipHeight();
+  candidate_key.clip_depth = canvas_.GetMaxOpDepth();
   candidate_key.texture_id = 0;  // Solid color in Fastpath
 
   if (!instances_.empty() && !current_key_.IsCompatible(candidate_key)) {
@@ -95,7 +96,7 @@ bool UberSDFBatcher::AddShape(const Paint& paint,
 
   instance.translation_and_depth[0] = m[12];  // tx
   instance.translation_and_depth[1] = m[13];  // ty
-  instance.translation_and_depth[2] = Entity::GetShaderClipDepth(clip_depth);
+  instance.translation_and_depth[2] = Entity::GetShaderClipDepth(shape_depth);
 
   uint32_t flags = 0;
   if (params.stroke) {
@@ -160,13 +161,12 @@ void UberSDFBatcher::Flush() {
     return;
   }
 
-  size_t count = instances_.size();
   auto batch_contents = std::make_unique<UberSDFBatchContents>(
       std::move(instances_), current_key_.tier, current_key_.blend_mode);
 
   Entity entity;
   entity.SetBlendMode(current_key_.blend_mode);
-  entity.SetClipDepth(current_key_.clip_depth);
+  entity.SetClipDepth(current_key_.clip_height);
   entity.SetContents(std::move(batch_contents));
 
   // Render the batched entity directly into the current pass.
@@ -174,8 +174,6 @@ void UberSDFBatcher::Flush() {
   pass.SetCommandLabel("UberSDFBatch");
   entity.Render(canvas_.GetRenderer(), pass);
 
-  // Monotonic depth progression: advance current_depth_ by batch count.
-  canvas_.AdvanceDepth(count);
   instances_.clear();
 }
 

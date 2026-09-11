@@ -1891,5 +1891,27 @@ TEST_P(DisplayListTest,
   EXPECT_EQ(it->second.coverage_union, Rect::MakeLTRB(0, 0, 1000, 1000));
 }
 
+TEST_P(DisplayListTest, UberSDFBatchingExceedsCapacityWithoutDepthFailure) {
+  flutter::DisplayListBuilder builder;
+  flutter::DlPaint paint(flutter::DlColor::kBlue());
+  for (int i = 0; i < 600; ++i) {
+    builder.DrawCircle(flutter::DlPoint(100, 100), 50, paint);
+  }
+  ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
+}
+
+TEST_P(DisplayListTest, UberSDFBatchingExceedsCapacityInsideClip) {
+  flutter::DisplayListBuilder builder;
+  builder.Save();
+  builder.ClipRect(flutter::DlRect::MakeXYWH(0, 0, 500, 500),
+                   flutter::DlClipOp::kIntersect, true);
+  flutter::DlPaint paint(flutter::DlColor::kRed());
+  for (int i = 0; i < 600; ++i) {
+    builder.DrawCircle(flutter::DlPoint(100, 100), 50, paint);
+  }
+  builder.Restore();
+  ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
+}
+
 }  // namespace testing
 }  // namespace impeller
