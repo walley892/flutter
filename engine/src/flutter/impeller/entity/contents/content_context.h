@@ -17,6 +17,7 @@
 #include "impeller/base/validation.h"
 #include "impeller/core/formats.h"
 #include "impeller/core/host_buffer.h"
+#include "impeller/core/vertex_buffer.h"
 #include "impeller/entity/contents/text_shadow_cache.h"
 #include "impeller/geometry/color.h"
 #include "impeller/renderer/capabilities.h"
@@ -215,6 +216,10 @@ class ContentContext {
   PipelineRef GetYUVToRGBFilterPipeline(ContentContextOptions opts) const;
   PipelineRef GetUberSDFPipeline(ContentContextOptions opts) const;
   PipelineRef GetComplexRSEPipeline(ContentContextOptions opts) const;
+  PipelineRef GetInstancedUberSDFFastpathPipeline(ContentContextOptions opts) const;
+  const VertexBuffer& GetStaticUnitQuadVertexBuffer() const {
+    return static_unit_quad_vertex_buffer_;
+  }
 #ifdef IMPELLER_ENABLE_OPENGLES
 #if !defined(FML_OS_EMSCRIPTEN)
   PipelineRef GetTiledTextureExternalPipeline(ContentContextOptions opts) const;
@@ -381,6 +386,8 @@ class ContentContext {
   std::shared_ptr<HostBuffer> indexes_host_buffer_;
   std::shared_ptr<Texture> empty_texture_;
   std::unique_ptr<TextShadowCache> text_shadow_cache_;
+  void InitializeStaticUnitQuad();
+  VertexBuffer static_unit_quad_vertex_buffer_;
 
   bool is_texture_caching_enabled_ = false;
   mutable std::unordered_map<const flutter::DlImage*, std::shared_ptr<Texture>>

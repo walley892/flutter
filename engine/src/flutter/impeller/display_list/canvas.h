@@ -38,6 +38,8 @@
 
 namespace impeller {
 
+class UberSDFBatcher;
+
 struct BackdropData {
   size_t backdrop_count = 0;
   bool all_filters_equal = true;
@@ -140,7 +142,7 @@ class Canvas {
                   bool requires_readback,
                   IRect32 cull_rect);
 
-  ~Canvas() = default;
+  ~Canvas();
 
   /// @brief Update the backdrop data used to group together backdrop filters
   ///        within the same layer
@@ -263,6 +265,18 @@ class Canvas {
 
   uint64_t GetMaxOpDepth() const { return transform_stack_.back().clip_depth; }
 
+  const ContentContext& GetRenderer() const { return renderer_; }
+
+  ContentContext& GetRenderer() { return renderer_; }
+
+  Scalar GetDistributedOpacity() const {
+    return transform_stack_.back().distributed_opacity;
+  }
+
+  void AdvanceDepth(size_t count);
+
+  UberSDFBatcher* GetUberSDFBatcher() const { return sdf_batcher_.get(); }
+
   struct SaveLayerState {
     Paint paint;
     Rect coverage;
@@ -335,6 +349,7 @@ class Canvas {
   // but clip geometries must be cached for record/replay for backdrop filters
   // and so must be kept alive longer.
   std::vector<std::unique_ptr<Geometry>> clip_geometry_;
+  std::unique_ptr<UberSDFBatcher> sdf_batcher_;
 
   uint64_t current_depth_ = 0u;
 
@@ -451,6 +466,8 @@ class Canvas {
       const Paint& paint);
 
   RenderPass& GetCurrentRenderPass() const;
+
+  friend class UberSDFBatcher;
 
   Canvas(const Canvas&) = delete;
 

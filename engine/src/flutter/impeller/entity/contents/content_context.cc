@@ -16,6 +16,7 @@
 #include "impeller/entity/contents/framebuffer_blend_contents.h"
 #include "impeller/entity/contents/pipelines.h"
 #include "impeller/entity/contents/text_shadow_cache.h"
+#include "impeller/entity/contents/uber_sdf_instance_data.h"
 #include "impeller/entity/entity.h"
 #include "impeller/entity/render_target_cache.h"
 #include "impeller/renderer/command_buffer.h"
@@ -305,6 +306,7 @@ struct ContentContext::Pipelines {
   Variants<VerticesUber2Shader> vertices_uber_2_;
   Variants<UberSDFPipeline> uber_sdf;
   Variants<ComplexRSEPipeline> complex_rse;
+  Variants<InstancedUberSDFFastpathPipeline> instanced_uber_sdf_fastpath;
   Variants<YUVToRGBFilterPipeline> yuv_to_rgb_filter;
 
 // Web doesn't support external texture OpenGL extensions
@@ -531,6 +533,65 @@ std::array<std::vector<Scalar>, 15> GetPorterDuffSpecConstants(
   }};
 }
 
+static std::optional<PipelineDescriptor>
+CreateInstancedUberSDFFastpathPipelineDescriptor(const Context& context) {
+  using VS = InstancedUberSDFFastpathPipeline::VertexShader;
+  using FS = InstancedUberSDFFastpathPipeline::FragmentShader;
+
+  auto desc =
+      InstancedUberSDFFastpathPipeline::Builder::MakeDefaultPipelineDescriptor(
+          context);
+  if (!desc.has_value()) {
+    return std::nullopt;
+  }
+
+  auto vertex_desc = std::make_shared<VertexDescriptor>();
+
+  ShaderStageIOSlot unit_pos_slot = VS::kInputUnitPosition;
+  unit_pos_slot.binding = 0;
+  unit_pos_slot.offset = 0;
+
+  ShaderStageIOSlot basis_slot = VS::kInputInstanceBasis;
+  basis_slot.binding = 1;
+  basis_slot.offset = offsetof(UberSDFInstanceData, basis);
+
+  ShaderStageIOSlot translate_slot = VS::kInputInstanceTranslationDepth;
+  translate_slot.binding = 1;
+  translate_slot.offset = offsetof(UberSDFInstanceData, translation_and_depth);
+
+  ShaderStageIOSlot size_stroke_slot = VS::kInputInstanceSizeStroke;
+  size_stroke_slot.binding = 1;
+  size_stroke_slot.offset = offsetof(UberSDFInstanceData, size_and_stroke);
+
+  ShaderStageIOSlot radii_slot = VS::kInputInstanceRadii;
+  radii_slot.binding = 1;
+  radii_slot.offset = offsetof(UberSDFInstanceData, radii);
+
+  ShaderStageIOSlot color_slot = VS::kInputInstanceColor;
+  color_slot.binding = 1;
+  color_slot.offset = offsetof(UberSDFInstanceData, color);
+
+  const std::vector<ShaderStageIOSlot> io_slots = {
+      unit_pos_slot,    basis_slot, translate_slot,
+      size_stroke_slot, radii_slot, color_slot};
+
+  const std::vector<ShaderStageBufferLayout> layouts = {
+      ShaderStageBufferLayout{.stride = sizeof(Point),
+                              .binding = 0,
+                              .input_rate = VertexInputRate::kVertex},
+      ShaderStageBufferLayout{.stride = sizeof(UberSDFInstanceData),
+                              .binding = 1,
+                              .input_rate = VertexInputRate::kInstance},
+  };
+
+  vertex_desc->RegisterDescriptorSetLayouts(VS::kDescriptorSetLayouts);
+  vertex_desc->RegisterDescriptorSetLayouts(FS::kDescriptorSetLayouts);
+  vertex_desc->SetStageInputs(io_slots, layouts);
+  desc->SetVertexDescriptor(std::move(vertex_desc));
+
+  return desc;
+}
+
 template <typename PipelineT>
 static std::unique_ptr<PipelineT> CreateDefaultPipeline(
     const Context& context) {
@@ -606,6 +667,8 @@ ContentContext::ContentContext(
     }
   }
 
+  InitializeStaticUnitQuad();
+
   auto options = ContentContextOptions{
       .sample_count = SampleCount::kCount4,
       .color_attachment_pixel_format =
@@ -640,6 +703,21 @@ ContentContext::ContentContext(
     if (context_->GetFlags().use_sdfs) {
       pipelines_->uber_sdf.CreateDefault(*context_, options);
       pipelines_->complex_rse.CreateDefault(*context_, options);
+
+      ContentContextOptions instanced_options = options;
+      instanced_options.primitive_type = PrimitiveType::kTriangle;
+      std::optional<PipelineDescriptor> instanced_desc =
+          CreateInstancedUberSDFFastpathPipelineDescriptor(*context_);
+      if (instanced_desc.has_value()) {
+        context_->GetPipelineLibrary()->LogPipelineCreation(*instanced_desc);
+        instanced_options.ApplyToPipelineDescriptor(*instanced_desc);
+        pipelines_->instanced_uber_sdf_fastpath.SetDefaultDescriptor(
+            *instanced_desc);
+        pipelines_->instanced_uber_sdf_fastpath.SetDefault(
+            instanced_options,
+            std::make_unique<InstancedUberSDFFastpathPipeline>(
+                *context_, instanced_desc, /*async=*/true));
+      }
     }
 
     if (context_->GetCapabilities()->SupportsSSBO()) {
@@ -1212,6 +1290,41 @@ PipelineRef ContentContext::GetUberSDFPipeline(
 PipelineRef ContentContext::GetComplexRSEPipeline(
     ContentContextOptions opts) const {
   return GetPipeline(this, pipelines_->complex_rse, opts);
+}
+
+PipelineRef ContentContext::GetInstancedUberSDFFastpathPipeline(
+    ContentContextOptions opts) const {
+  opts.primitive_type = PrimitiveType::kTriangle;
+  return GetPipeline(this, pipelines_->instanced_uber_sdf_fastpath, opts);
+}
+
+void ContentContext::InitializeStaticUnitQuad() {
+  static constexpr std::array<Point, 4> kQuadVertices = {
+      Point(-1.0f, -1.0f),
+      Point(1.0f, -1.0f),
+      Point(1.0f, 1.0f),
+      Point(-1.0f, 1.0f),
+  };
+  static constexpr std::array<uint16_t, 6> kQuadIndices = {0, 1, 2, 0, 2, 3};
+
+  auto vertex_buffer = context_->GetResourceAllocator()->CreateBufferWithCopy(
+      reinterpret_cast<const uint8_t*>(kQuadVertices.data()),
+      sizeof(Point) * kQuadVertices.size());
+  auto index_buffer = context_->GetResourceAllocator()->CreateBufferWithCopy(
+      reinterpret_cast<const uint8_t*>(kQuadIndices.data()),
+      sizeof(uint16_t) * kQuadIndices.size());
+
+  if (!vertex_buffer || !index_buffer) {
+    VALIDATION_LOG << "Failed to allocate static unit quad buffer.";
+    return;
+  }
+
+  static_unit_quad_vertex_buffer_.vertex_buffer =
+      BufferView(std::move(vertex_buffer), Range(0, sizeof(Point) * 4));
+  static_unit_quad_vertex_buffer_.index_buffer =
+      BufferView(std::move(index_buffer), Range(0, sizeof(uint16_t) * 6));
+  static_unit_quad_vertex_buffer_.vertex_count = 6;
+  static_unit_quad_vertex_buffer_.index_type = IndexType::k16bit;
 }
 
 PipelineRef ContentContext::GetPorterDuffPipeline(

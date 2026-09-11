@@ -25,7 +25,9 @@
 #include "impeller/display_list/dl_image_impeller.h"
 #include "impeller/display_list/dl_vertices_geometry.h"
 #include "impeller/display_list/image_filter.h"
+#include "impeller/display_list/paint.h"
 #include "impeller/display_list/skia_conversions.h"
+#include "impeller/display_list/uber_sdf_batcher.h"
 #include "impeller/entity/contents/atlas_contents.h"
 #include "impeller/entity/contents/circle_contents.h"
 #include "impeller/entity/contents/clip_contents.h"
@@ -491,12 +493,27 @@ Canvas::Canvas(ContentContext& renderer,
   SetupRenderPass();
 }
 
+Canvas::~Canvas() {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
+}
+
 void Canvas::Initialize(std::optional<Rect> cull_rect) {
   initial_cull_rect_ = cull_rect;
   transform_stack_.emplace_back(CanvasStackEntry{
       .clip_depth = kMaxDepth,
   });
   FML_DCHECK(GetSaveCount() == 1u);
+  if (renderer_.GetContext()->GetFlags().use_sdfs) {
+    sdf_batcher_ = std::make_unique<UberSDFBatcher>(*this);
+  }
+}
+
+void Canvas::AdvanceDepth(size_t count) {
+  current_depth_ += count;
+  FML_DCHECK(current_depth_ <= transform_stack_.back().clip_depth)
+      << current_depth_ << " <=? " << transform_stack_.back().clip_depth;
 }
 
 void Canvas::Reset() {
@@ -1407,6 +1424,10 @@ void Canvas::DrawCircle(const Point& center,
 void Canvas::ClipGeometry(const Geometry& geometry,
                           Entity::ClipOperation clip_op,
                           bool is_aa) {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
+
   if (IsSkipping()) {
     return;
   }
@@ -1830,6 +1851,9 @@ void Canvas::SaveLayer(const Paint& paint,
                        bool can_distribute_opacity,
                        std::optional<int64_t> backdrop_id) {
   TRACE_EVENT0("flutter", "Canvas::saveLayer");
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
   if (IsSkipping()) {
     return SkipUntilMatchingRestore(total_content_depth);
   }
@@ -2058,6 +2082,10 @@ void Canvas::SaveLayer(const Paint& paint,
 }
 
 bool Canvas::Restore() {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
+
   FML_DCHECK(transform_stack_.size() > 0);
   if (transform_stack_.size() == 1) {
     return false;
@@ -2293,6 +2321,13 @@ void Canvas::AddRenderSDFEntityToCurrentPass(
     transform = transform * shape_transform.value();
   }
 
+  uint32_t next_depth = reuse_depth ? current_depth_ : (current_depth_ + 1);
+  if (sdf_batcher_ &&
+      sdf_batcher_->AddShape(paint, params, transform, next_depth,
+                             clip_coverage_stack_.CurrentClipCoverage())) {
+    return;
+  }
+
   Entity entity;
   entity.SetTransform(transform);
   entity.SetBlendMode(paint.blend_mode);
@@ -2425,6 +2460,10 @@ void Canvas::AddRenderEntityWithFiltersToCurrentPass(
 }
 
 void Canvas::AddRenderEntityToCurrentPass(Entity& entity, bool reuse_depth) {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
+
   if (IsSkipping()) {
     return;
   }
@@ -2537,6 +2576,10 @@ std::shared_ptr<Texture> Canvas::FlipBackdrop(Point global_pass_position,
                                               bool should_remove_texture,
                                               bool should_use_onscreen,
                                               bool post_depth_increment) {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
+
   LazyRenderingConfig rendering_config = std::move(render_passes_.back());
   render_passes_.pop_back();
 
@@ -2726,6 +2769,10 @@ bool Canvas::EnsureFinalMipmapGeneration() const {
 }
 
 void Canvas::EndReplay() {
+  if (sdf_batcher_ && !sdf_batcher_->IsEmpty()) {
+    sdf_batcher_->Flush();
+  }
+
   FML_DCHECK(render_passes_.size() == 1u);
   render_passes_.back().GetInlinePassContext()->GetRenderPass();
   render_passes_.back().GetInlinePassContext()->EndPass(

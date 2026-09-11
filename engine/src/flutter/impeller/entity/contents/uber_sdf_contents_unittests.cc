@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "gtest/gtest.h"
+#include "impeller/entity/contents/uber_sdf_batch_contents.h"
 #include "impeller/entity/contents/uber_sdf_contents.h"
+#include "impeller/entity/contents/uber_sdf_instance_data.h"
 #include "impeller/entity/contents/uber_sdf_parameters.h"
 #include "impeller/entity/entity.h"
 #include "impeller/entity/geometry/uber_sdf_geometry.h"
@@ -146,6 +148,35 @@ TEST(UberSDFContentsTest, AsBackgroundColorGradientReturnsNullopt) {
   // solid background color, so AsBackgroundColor must return nullopt.
   auto bg_color = contents->AsBackgroundColor(entity, ISize(500, 500));
   EXPECT_FALSE(bg_color.has_value());
+}
+
+TEST(UberSDFContentsTest, UberSDFInstanceDataLayout) {
+  EXPECT_EQ(sizeof(UberSDFInstanceData), 96u);
+  EXPECT_EQ(alignof(UberSDFInstanceData), 16u);
+
+  EXPECT_EQ(offsetof(UberSDFInstanceData, basis), 0u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, translation_and_depth), 16u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, size_and_stroke), 32u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, radii), 48u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, color), 64u);
+  EXPECT_EQ(offsetof(UberSDFInstanceData, extra_params), 80u);
+}
+
+TEST(UberSDFContentsTest, UberSDFBatchContentsLifecycle) {
+  std::vector<UberSDFInstanceData> instances;
+  for (int i = 0; i < 10; ++i) {
+    UberSDFInstanceData instance = {};
+    instance.color[0] = 1.0f;
+    instance.color[3] = 1.0f;
+    instances.push_back(instance);
+  }
+
+  UberSDFBatchContents batch(std::move(instances), UberSDFTier::kFastpath,
+                             BlendMode::kSrcOver);
+  EXPECT_EQ(batch.GetInstanceCount(), 10u);
+  EXPECT_EQ(batch.GetTier(), UberSDFTier::kFastpath);
+  EXPECT_EQ(batch.GetBlendMode(), BlendMode::kSrcOver);
+  EXPECT_FALSE(batch.IsOpaque(Matrix()));
 }
 
 }  // namespace testing

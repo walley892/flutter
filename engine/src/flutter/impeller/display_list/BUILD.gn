@@ -46,6 +46,8 @@ impeller_component("display_list") {
     "nine_patch_converter.h",
     "paint.cc",
     "paint.h",
+    "uber_sdf_batcher.cc",
+    "uber_sdf_batcher.h",
   ]
 
   public_deps = [
