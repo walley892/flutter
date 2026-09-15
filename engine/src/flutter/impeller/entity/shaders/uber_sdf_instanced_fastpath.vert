@@ -23,7 +23,6 @@ out vec2 v_half_size;
 out vec4 v_radii;
 out vec4 v_color;
 out float v_half_stroke;
-out float v_stroke_flags;
 out float v_aa_pixels;
 out vec2 v_pixel_size;
 
@@ -79,7 +78,6 @@ void main() {
   v_half_size = half_size;
   v_radii = instance_radii;
   v_half_stroke = is_stroked ? (stroke_width * 0.5) : 0.0;
-  v_stroke_flags = flags;
   v_aa_pixels = aa_pixels;
   v_pixel_size = pixel_size;
 }

@@ -7,14 +7,13 @@ precision mediump float;
 #include <impeller/color.glsl>
 #include <impeller/constants.glsl>
 
-in vec2 v_position;
-in vec2 v_half_size;
-in vec4 v_radii;
-in vec4 v_color;
-in float v_half_stroke;
-in float v_stroke_flags;
-in float v_aa_pixels;
-in vec2 v_pixel_size;
+highp in vec2 v_position;
+highp in vec2 v_half_size;
+highp in vec4 v_radii;
+highp in vec4 v_color;
+highp in float v_half_stroke;
+highp in float v_aa_pixels;
+highp in vec2 v_pixel_size;
 
 out vec4 frag_color;
 
