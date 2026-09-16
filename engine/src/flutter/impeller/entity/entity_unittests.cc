@@ -2298,6 +2298,44 @@ TEST_P(EntityTest, ContentContextOptionsHasReasonableHashFunctions) {
   EXPECT_NE(hash_c, hash_d);
 }
 
+TEST_P(EntityTest, ContentContextOptionsKeyIgnoresUnusedDepthStencilState) {
+  // Without depth or stencil attachments, ApplyToPipelineDescriptor clears
+  // them outright, so these fields cannot affect the resulting pipeline. Two
+  // option sets that produce an identical pipeline must produce an identical
+  // key, otherwise pipelines pre-compiled at startup are cached under keys
+  // that no draw call ever asks for.
+  ContentContextOptions a;
+  a.has_depth_stencil_attachments = false;
+  a.depth_compare = CompareFunction::kAlways;
+  a.depth_write_enabled = false;
+  a.stencil_mode = ContentContextOptions::StencilMode::kIgnore;
+
+  ContentContextOptions b;
+  b.has_depth_stencil_attachments = false;
+  b.depth_compare = CompareFunction::kGreaterEqual;
+  b.depth_write_enabled = true;
+  b.stencil_mode = ContentContextOptions::StencilMode::kCoverCompare;
+
+  EXPECT_EQ(a.ToKey(), b.ToKey());
+
+  // But with attachments present, the same fields must still disambiguate.
+  ContentContextOptions c = a;
+  c.has_depth_stencil_attachments = true;
+  ContentContextOptions d = b;
+  d.has_depth_stencil_attachments = true;
+
+  EXPECT_NE(c.ToKey(), d.ToKey());
+  EXPECT_NE(a.ToKey(), c.ToKey());
+}
+
+TEST_P(EntityTest, ContentContextOptionsDefaultsMatchDrawTime) {
+  // The struct defaults must agree with what OptionsFromPass produces at draw
+  // time. A mismatch means every pipeline compiled at startup with default
+  // options is keyed under a variant nothing ever requests.
+  ContentContextOptions defaults;
+  EXPECT_EQ(defaults.depth_compare, CompareFunction::kGreaterEqual);
+}
+
 #ifdef FML_OS_LINUX
 TEST_P(EntityTest, FramebufferFetchVulkanBindingOffsetIsTheSame) {
   // Using framebuffer fetch on Vulkan requires that we maintain a subpass input

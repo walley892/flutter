@@ -77,7 +77,10 @@ struct ContentContextOptions {
 
   SampleCount sample_count = SampleCount::kCount1;
   BlendMode blend_mode = BlendMode::kSrcOver;
-  CompareFunction depth_compare = CompareFunction::kAlways;
+  // Must match what entities use at draw time (see OptionsFromPass). A
+  // mismatched default causes every pipeline compiled at startup to be keyed
+  // under a variant that no draw call ever requests.
+  CompareFunction depth_compare = CompareFunction::kGreaterEqual;
   StencilMode stencil_mode = ContentContextOptions::StencilMode::kIgnore;
   PrimitiveType primitive_type = PrimitiveType::kTriangle;
   PixelFormat color_attachment_pixel_format = PixelFormat::kUnknown;
@@ -94,15 +97,26 @@ struct ContentContextOptions {
     static_assert(sizeof(primitive_type) == 1);
     static_assert(sizeof(color_attachment_pixel_format) == 1);
 
+    // When there are no depth or stencil attachments,
+    // ApplyToPipelineDescriptor clears them outright, so the depth and stencil
+    // fields cannot influence the resulting pipeline state. Normalize them to
+    // zero so that option sets which produce identical pipelines also produce
+    // identical keys.
     return (is_for_rrect_blur_clear ? 1llu : 0llu) << 0 |
            (0) << 1 |  // // Unused, previously wireframe.
            (has_depth_stencil_attachments ? 1llu : 0llu) << 2 |
-           (depth_write_enabled ? 1llu : 0llu) << 3 |
+           ((has_depth_stencil_attachments && depth_write_enabled) ? 1llu
+                                                                   : 0llu)
+               << 3 |
            // enums
            static_cast<uint64_t>(color_attachment_pixel_format) << 8 |
            static_cast<uint64_t>(primitive_type) << 16 |
-           static_cast<uint64_t>(stencil_mode) << 24 |
-           static_cast<uint64_t>(depth_compare) << 32 |
+           (has_depth_stencil_attachments ? static_cast<uint64_t>(stencil_mode)
+                                          : 0llu)
+               << 24 |
+           (has_depth_stencil_attachments ? static_cast<uint64_t>(depth_compare)
+                                          : 0llu)
+               << 32 |
            static_cast<uint64_t>(blend_mode) << 40 |
            static_cast<uint64_t>(sample_count) << 48;
   }

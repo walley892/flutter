@@ -118,7 +118,8 @@ class Variants : public GenericVariants {
 
   void CreateDefault(const Context& context,
                      const ContentContextOptions& options,
-                     const std::vector<Scalar>& constants = {}) {
+                     const std::vector<Scalar>& constants = {},
+                     bool high_priority = false) {
     std::optional<PipelineDescriptor> desc =
         PipelineHandleT::Builder::MakeDefaultPipelineDescriptor(context,
                                                                 constants);
@@ -128,9 +129,36 @@ class Variants : public GenericVariants {
     }
     context.GetPipelineLibrary()->LogPipelineCreation(*desc);
     options.ApplyToPipelineDescriptor(*desc);
+    desc->SetHighPriority(high_priority);
     desc_ = desc;
     SetDefault(options, std::make_unique<PipelineHandleT>(context, desc_,
                                                           /*async=*/true));
+  }
+
+  /// Pre-compile an additional variant derived from the default descriptor.
+  ///
+  /// This is used to warm variants that are known to be needed by the first
+  /// frame but which are not the default. Must only be called after a
+  /// successful CreateDefault(), and only with options whose
+  /// `has_depth_stencil_attachments` matches the default's:
+  /// ApplyToPipelineDescriptor clears depth and stencil attachments one-way
+  /// and then DCHECKs that the descriptor matches the flag.
+  void CreateVariant(const Context& context,
+                     const ContentContextOptions& options,
+                     bool high_priority = false) {
+    if (!desc_.has_value()) {
+      return;
+    }
+    FML_DCHECK(default_options_.has_value());
+    FML_DCHECK(default_options_->has_depth_stencil_attachments ==
+               options.has_depth_stencil_attachments);
+    PipelineDescriptor desc = desc_.value();
+    options.ApplyToPipelineDescriptor(desc);
+    desc.SetHighPriority(high_priority);
+    desc.SetLabel(std::format("{} V#{}", desc.GetLabel(), GetPipelineCount()));
+    context.GetPipelineLibrary()->LogPipelineCreation(desc);
+    Set(options, std::make_unique<PipelineHandleT>(context, desc,
+                                                   /*async=*/true));
   }
 
   PipelineHandleT* Get(const ContentContextOptions& options) const {
@@ -531,23 +559,6 @@ std::array<std::vector<Scalar>, 15> GetPorterDuffSpecConstants(
   }};
 }
 
-template <typename PipelineT>
-static std::unique_ptr<PipelineT> CreateDefaultPipeline(
-    const Context& context) {
-  auto desc = PipelineT::Builder::MakeDefaultPipelineDescriptor(context);
-  if (!desc.has_value()) {
-    return nullptr;
-  }
-  // Apply default ContentContextOptions to the descriptor.
-  const auto default_color_format =
-      context.GetCapabilities()->GetDefaultColorFormat();
-  ContentContextOptions{.sample_count = SampleCount::kCount4,
-                        .primitive_type = PrimitiveType::kTriangleStrip,
-                        .color_attachment_pixel_format = default_color_format}
-      .ApplyToPipelineDescriptor(*desc);
-  return std::make_unique<PipelineT>(context, desc);
-}
-
 ContentContext::ContentContext(
     std::shared_ptr<Context> context,
     std::shared_ptr<TypographerContext> typographer_context,
@@ -606,20 +617,50 @@ ContentContext::ContentContext(
     }
   }
 
+  const PixelFormat default_color_format =
+      context_->GetCapabilities()->GetDefaultColorFormat();
+  // MSAA is all or nothing: RenderTargetAllocator::CreateOffscreenMSAA
+  // hardcodes a sample count of 4, and the non-MSAA path always yields a
+  // sample count of 1. Which one is used is decided solely by this capability
+  // (see Canvas::Canvas and DisplayListToTexture). Hardcoding 4x here means
+  // every pipeline compiled at startup is keyed under an unreachable sample
+  // count on devices without MSAA support.
+  const SampleCount default_sample_count =
+      context_->GetCapabilities()->SupportsOffscreenMSAA()
+          ? SampleCount::kCount4
+          : SampleCount::kCount1;
+  // Convex path fills tessellate to triangle fans where supported, which is
+  // the common case on OpenGLES and most Vulkan drivers.
+  const bool supports_triangle_fan =
+      context_->GetCapabilities()->SupportsTriangleFan() &&
+      context_->GetCapabilities()->SupportsPrimitiveRestart();
+
   auto options = ContentContextOptions{
-      .sample_count = SampleCount::kCount4,
-      .color_attachment_pixel_format =
-          context_->GetCapabilities()->GetDefaultColorFormat()};
+      .sample_count = default_sample_count,
+      .primitive_type = PrimitiveType::kTriangle,
+      .color_attachment_pixel_format = default_color_format};
   auto options_trianglestrip = ContentContextOptions{
-      .sample_count = SampleCount::kCount4,
+      .sample_count = default_sample_count,
       .primitive_type = PrimitiveType::kTriangleStrip,
-      .color_attachment_pixel_format =
-          context_->GetCapabilities()->GetDefaultColorFormat()};
+      .color_attachment_pixel_format = default_color_format};
+  auto options_trianglefan = options_trianglestrip;
+  options_trianglefan.primitive_type = PrimitiveType::kTriangleFan;
+  // Opaque entities are coerced to source blending and enable depth write so
+  // that they can be reordered. See ColorSourceContents::DrawGeometry.
+  auto options_trianglestrip_src_depth_write = options_trianglestrip;
+  options_trianglestrip_src_depth_write.blend_mode = BlendMode::kSrc;
+  options_trianglestrip_src_depth_write.depth_write_enabled = true;
+  // As above, but for pipelines whose contents force a triangle list
+  // regardless of the source geometry.
+  auto options_src_depth_write = options;
+  options_src_depth_write.blend_mode = BlendMode::kSrc;
+  options_src_depth_write.depth_write_enabled = true;
+  // These passes never use MSAA and have no depth or stencil attachments, so
+  // the sample count here is intentionally not capability derived.
   auto options_no_msaa_no_depth_stencil = ContentContextOptions{
       .sample_count = SampleCount::kCount1,
       .primitive_type = PrimitiveType::kTriangleStrip,
-      .color_attachment_pixel_format =
-          context_->GetCapabilities()->GetDefaultColorFormat(),
+      .color_attachment_pixel_format = default_color_format,
       .has_depth_stencil_attachments = false};
   const auto supports_decal = static_cast<Scalar>(
       context_->GetCapabilities()->SupportsDecalSamplerAddressMode());
@@ -632,90 +673,143 @@ ContentContext::ContentContext(
         *context_, options,
         {static_cast<Scalar>(
             GetContext()->GetCapabilities()->GetDefaultGlyphAtlasFormat() ==
-            PixelFormat::kA8UNormInt)});
-    pipelines_->solid_fill.CreateDefault(*context_, options);
-    pipelines_->texture.CreateDefault(*context_, options);
-    pipelines_->fast_gradient.CreateDefault(*context_, options);
-    pipelines_->circle.CreateDefault(*context_, options);
+            PixelFormat::kA8UNormInt)},
+        /*high_priority=*/true);
+    pipelines_->solid_fill.CreateDefault(*context_, options_trianglestrip, {},
+                                         /*high_priority=*/true);
+    pipelines_->solid_fill.CreateVariant(*context_,
+                                         options_trianglestrip_src_depth_write,
+                                         /*high_priority=*/true);
+    if (supports_triangle_fan) {
+      // Convex path fills tessellate to fans on these backends.
+      pipelines_->solid_fill.CreateVariant(*context_, options_trianglefan,
+                                           /*high_priority=*/true);
+    }
+    pipelines_->texture.CreateDefault(*context_, options_trianglestrip, {},
+                                      /*high_priority=*/true);
+    // LinearGradientContents::FastLinearGradient supplies its own geometry
+    // callback that always emits a triangle list, regardless of the source
+    // geometry, so this pipeline must be warmed with kTriangle rather than
+    // the triangle strip used by the other color source pipelines.
+    pipelines_->fast_gradient.CreateDefault(*context_, options, {},
+                                            /*high_priority=*/true);
+    pipelines_->fast_gradient.CreateVariant(*context_, options_src_depth_write,
+                                            /*high_priority=*/true);
+    pipelines_->circle.CreateDefault(*context_, options_trianglestrip, {},
+                                     /*high_priority=*/true);
+    pipelines_->circle.CreateVariant(*context_,
+                                     options_trianglestrip_src_depth_write,
+                                     /*high_priority=*/true);
     if (context_->GetFlags().use_sdfs) {
-      pipelines_->uber_sdf.CreateDefault(*context_, options);
-      pipelines_->complex_rse.CreateDefault(*context_, options);
+      pipelines_->uber_sdf.CreateDefault(*context_, options_trianglestrip);
+      pipelines_->complex_rse.CreateDefault(*context_, options_trianglestrip);
     }
 
     if (context_->GetCapabilities()->SupportsSSBO()) {
-      pipelines_->linear_gradient_ssbo_fill.CreateDefault(*context_, options);
-      pipelines_->radial_gradient_ssbo_fill.CreateDefault(*context_, options);
-      pipelines_->conical_gradient_ssbo_fill.CreateDefault(*context_, options,
-                                                           {3.0});
+      pipelines_->linear_gradient_ssbo_fill.CreateDefault(
+          *context_, options_trianglestrip, {}, /*high_priority=*/true);
+      pipelines_->linear_gradient_ssbo_fill.CreateVariant(
+          *context_, options_trianglestrip_src_depth_write,
+          /*high_priority=*/true);
+      pipelines_->radial_gradient_ssbo_fill.CreateDefault(
+          *context_, options_trianglestrip);
+      pipelines_->conical_gradient_ssbo_fill.CreateDefault(
+          *context_, options_trianglestrip, {3.0});
       pipelines_->conical_gradient_ssbo_fill_radial.CreateDefault(
-          *context_, options, {1.0});
+          *context_, options_trianglestrip, {1.0});
       pipelines_->conical_gradient_ssbo_fill_strip.CreateDefault(
-          *context_, options, {2.0});
+          *context_, options_trianglestrip, {2.0});
       pipelines_->conical_gradient_ssbo_fill_strip_and_radial.CreateDefault(
-          *context_, options, {0.0});
-      pipelines_->sweep_gradient_ssbo_fill.CreateDefault(*context_, options);
+          *context_, options_trianglestrip, {0.0});
+      pipelines_->sweep_gradient_ssbo_fill.CreateDefault(*context_,
+                                                         options_trianglestrip);
     } else {
-      pipelines_->linear_gradient_uniform_fill.CreateDefault(*context_,
-                                                             options);
-      pipelines_->radial_gradient_uniform_fill.CreateDefault(*context_,
-                                                             options);
-      pipelines_->conical_gradient_uniform_fill.CreateDefault(*context_,
-                                                              options);
-      pipelines_->conical_gradient_uniform_fill_radial.CreateDefault(*context_,
-                                                                     options);
-      pipelines_->conical_gradient_uniform_fill_strip.CreateDefault(*context_,
-                                                                    options);
+      pipelines_->linear_gradient_uniform_fill.CreateDefault(
+          *context_, options_trianglestrip, {}, /*high_priority=*/true);
+      pipelines_->linear_gradient_uniform_fill.CreateVariant(
+          *context_, options_trianglestrip_src_depth_write,
+          /*high_priority=*/true);
+      pipelines_->radial_gradient_uniform_fill.CreateDefault(
+          *context_, options_trianglestrip);
+      pipelines_->conical_gradient_uniform_fill.CreateDefault(
+          *context_, options_trianglestrip);
+      pipelines_->conical_gradient_uniform_fill_radial.CreateDefault(
+          *context_, options_trianglestrip);
+      pipelines_->conical_gradient_uniform_fill_strip.CreateDefault(
+          *context_, options_trianglestrip);
       pipelines_->conical_gradient_uniform_fill_strip_and_radial.CreateDefault(
-          *context_, options);
-      pipelines_->sweep_gradient_uniform_fill.CreateDefault(*context_, options);
+          *context_, options_trianglestrip);
+      pipelines_->sweep_gradient_uniform_fill.CreateDefault(
+          *context_, options_trianglestrip);
 
-      pipelines_->linear_gradient_fill.CreateDefault(*context_, options);
-      pipelines_->radial_gradient_fill.CreateDefault(*context_, options);
-      pipelines_->conical_gradient_fill.CreateDefault(*context_, options);
-      pipelines_->conical_gradient_fill_radial.CreateDefault(*context_,
-                                                             options);
-      pipelines_->conical_gradient_fill_strip.CreateDefault(*context_, options);
+      pipelines_->linear_gradient_fill.CreateDefault(
+          *context_, options_trianglestrip, {}, /*high_priority=*/true);
+      pipelines_->linear_gradient_fill.CreateVariant(
+          *context_, options_trianglestrip_src_depth_write,
+          /*high_priority=*/true);
+      pipelines_->radial_gradient_fill.CreateDefault(*context_,
+                                                     options_trianglestrip);
+      pipelines_->conical_gradient_fill.CreateDefault(*context_,
+                                                      options_trianglestrip);
+      pipelines_->conical_gradient_fill_radial.CreateDefault(
+          *context_, options_trianglestrip);
+      pipelines_->conical_gradient_fill_strip.CreateDefault(
+          *context_, options_trianglestrip);
       pipelines_->conical_gradient_fill_strip_and_radial.CreateDefault(
-          *context_, options);
-      pipelines_->sweep_gradient_fill.CreateDefault(*context_, options);
+          *context_, options_trianglestrip);
+      pipelines_->sweep_gradient_fill.CreateDefault(*context_,
+                                                    options_trianglestrip);
     }
 
-    /// Setup default clip pipeline.
-    auto clip_pipeline_descriptor =
-        ClipPipeline::Builder::MakeDefaultPipelineDescriptor(*context_);
-    if (!clip_pipeline_descriptor.has_value()) {
-      return;
-    }
-    ContentContextOptions{
-        .sample_count = SampleCount::kCount4,
-        .color_attachment_pixel_format =
-            context_->GetCapabilities()->GetDefaultColorFormat()}
-        .ApplyToPipelineDescriptor(*clip_pipeline_descriptor);
-    // Disable write to all color attachments.
-    auto clip_color_attachments =
-        clip_pipeline_descriptor->GetColorAttachmentDescriptors();
-    for (auto& color_attachment : clip_color_attachments) {
-      color_attachment.second.write_mask = ColorWriteMaskBits::kNone;
-    }
-    clip_pipeline_descriptor->SetColorAttachmentDescriptors(
-        std::move(clip_color_attachments));
-    pipelines_->clip.SetDefault(
-        options,
-        std::make_unique<ClipPipeline>(*context_, clip_pipeline_descriptor));
+    /// Setup the clip pipelines that are actually used at runtime.
+    ///
+    /// BlendMode::kDst disables writes to all color attachments (see
+    /// ApplyToPipelineDescriptor), which is what the clip pipelines need.
+    auto clip_stencil_options = options_trianglestrip;
+    clip_stencil_options.blend_mode = BlendMode::kDst;
+    clip_stencil_options.stencil_mode =
+        ContentContextOptions::StencilMode::kStencilIncrementAll;
+    clip_stencil_options.depth_write_enabled = false;
+    pipelines_->clip.CreateDefault(*context_, clip_stencil_options, {},
+                                   /*high_priority=*/true);
+
+    // The cover draw for intersect clips.
+    auto clip_cover_options = options_trianglestrip;
+    clip_cover_options.blend_mode = BlendMode::kDst;
+    clip_cover_options.stencil_mode =
+        ContentContextOptions::StencilMode::kCoverCompareInverted;
+    clip_cover_options.depth_write_enabled = true;
+    pipelines_->clip.CreateVariant(*context_, clip_cover_options,
+                                   /*high_priority=*/true);
+
+    // Stencil preparation for concave paths, which are drawn with triangles.
+    auto clip_stencil_nonzero_options = options;
+    clip_stencil_nonzero_options.blend_mode = BlendMode::kDst;
+    clip_stencil_nonzero_options.stencil_mode =
+        ContentContextOptions::StencilMode::kStencilNonZeroFill;
+    clip_stencil_nonzero_options.depth_write_enabled = false;
+    pipelines_->clip.CreateVariant(*context_, clip_stencil_nonzero_options,
+                                   /*high_priority=*/false);
+
     pipelines_->texture_downsample.CreateDefault(
-        *context_, options_no_msaa_no_depth_stencil);
+        *context_, options_no_msaa_no_depth_stencil, {},
+        /*high_priority=*/true);
     pipelines_->texture_downsample_bounded.CreateDefault(
-        *context_, options_no_msaa_no_depth_stencil);
-    pipelines_->rrect_blur.CreateDefault(*context_, options_trianglestrip);
-    pipelines_->rsuperellipse_blur.CreateDefault(*context_,
-                                                 options_trianglestrip);
+        *context_, options_no_msaa_no_depth_stencil, {},
+        /*high_priority=*/true);
+    pipelines_->rrect_blur.CreateDefault(*context_, options_trianglestrip, {},
+                                         /*high_priority=*/true);
+    pipelines_->rsuperellipse_blur.CreateDefault(
+        *context_, options_trianglestrip, {}, /*high_priority=*/true);
     pipelines_->texture_strict_src.CreateDefault(*context_, options);
     pipelines_->tiled_texture.CreateDefault(*context_, options,
                                             {supports_decal});
+    pipelines_->tiled_texture.CreateVariant(
+        *context_, options_trianglestrip_src_depth_write);
     pipelines_->gaussian_blur.CreateDefault(
         *context_, options_no_msaa_no_depth_stencil, {supports_decal});
-    pipelines_->border_mask_blur.CreateDefault(*context_,
-                                               options_trianglestrip);
+    pipelines_->border_mask_blur.CreateDefault(*context_, options_trianglestrip,
+                                               {}, /*high_priority=*/true);
     pipelines_->color_matrix_color_filter.CreateDefault(*context_,
                                                         options_trianglestrip);
     pipelines_->shadow_vertices_.CreateDefault(*context_, options);
@@ -733,7 +827,8 @@ ContentContext::ContentContext(
     pipelines_->destination_blend.CreateDefault(
         *context_, options_trianglestrip, porter_duff_constants[2]);
     pipelines_->source_over_blend.CreateDefault(
-        *context_, options_trianglestrip, porter_duff_constants[3]);
+        *context_, options_trianglestrip, porter_duff_constants[3],
+        /*high_priority=*/true);
     pipelines_->destination_over_blend.CreateDefault(
         *context_, options_trianglestrip, porter_duff_constants[4]);
     pipelines_->source_in_blend.CreateDefault(*context_, options_trianglestrip,
@@ -864,13 +959,31 @@ ContentContext::ContentContext(
 #if defined(IMPELLER_ENABLE_OPENGLES) && !defined(FML_OS_MACOSX) && \
     !defined(FML_OS_EMSCRIPTEN)
     // GLES only shader that is unsupported on macOS and web.
-    pipelines_->tiled_texture_external.CreateDefault(*context_, options);
-    pipelines_->tiled_texture_uv_external.CreateDefault(*context_, options);
+    //
+    // TextureContents::Render unconditionally sets the primitive type to
+    // kTriangleStrip before selecting the external pipeline, so kTriangle
+    // would never be hit. It also enables depth writes for the opaque
+    // BlendMode::kSrc case, which is warmed as a variant below.
+    pipelines_->tiled_texture_external.CreateDefault(*context_,
+                                                     options_trianglestrip);
+    pipelines_->tiled_texture_external.CreateVariant(
+        *context_, options_trianglestrip_src_depth_write);
+    // Drawn via ColorSourceContents::DrawGeometry, which takes the primitive
+    // type from the geometry. Triangle strips dominate; the kSrc depth write
+    // case is warmed as a variant.
+    pipelines_->tiled_texture_uv_external.CreateDefault(*context_,
+                                                        options_trianglestrip);
+    pipelines_->tiled_texture_uv_external.CreateVariant(
+        *context_, options_trianglestrip_src_depth_write);
 #endif  // !defined(FML_OS_MACOSX)
 
 #if defined(IMPELLER_ENABLE_OPENGLES)
-    pipelines_->texture_downsample_gles.CreateDefault(*context_,
-                                                      options_trianglestrip);
+    // Drawn into the Gaussian blur downsample subpass, which is created with
+    // neither MSAA nor depth/stencil attachments. This must match the sibling
+    // texture_downsample and texture_downsample_bounded pipelines, which are
+    // selected in the same subpass with the same options.
+    pipelines_->texture_downsample_gles.CreateDefault(
+        *context_, options_no_msaa_no_depth_stencil);
 #endif  // IMPELLER_ENABLE_OPENGLES
   }
 
