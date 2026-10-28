@@ -1172,6 +1172,17 @@ public class FlutterRenderer implements TextureRegistry {
   }
 
   /**
+   * Notifies Flutter that a view intends to display this renderer's output, so the engine can start
+   * preparing rendering resources before {@link #startRenderingToSurface(Surface, boolean)} is
+   * called.
+   *
+   * <p>See {@link FlutterJNI#prewarmRendering()}.
+   */
+  public void prewarmRendering() {
+    flutterJNI.prewarmRendering();
+  }
+
+  /**
    * Notifies Flutter that a {@code surface} previously registered with {@link
    * #startRenderingToSurface(Surface, boolean)} has changed size to the given {@code width} and
    * {@code height}.

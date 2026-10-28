@@ -26,14 +26,20 @@ namespace flutter {
 GPUSurfaceVulkanImpeller::GPUSurfaceVulkanImpeller(
     GPUSurfaceVulkanDelegate* delegate,
     std::shared_ptr<impeller::Context> context,
-    bool render_to_surface)
+    bool render_to_surface,
+    std::shared_ptr<impeller::AiksContext> aiks_context)
     : delegate_(delegate), render_to_surface_(render_to_surface) {
   if (!context || !context->IsValid()) {
     return;
   }
 
-  auto aiks_context = std::make_shared<impeller::AiksContext>(
-      context, impeller::TypographerContextSkia::Make());
+  if (aiks_context) {
+    FML_DCHECK(aiks_context->GetContext() == context)
+        << "The AiksContext must be created for this surface's context.";
+  } else {
+    aiks_context = std::make_shared<impeller::AiksContext>(
+        context, impeller::TypographerContextSkia::Make());
+  }
   if (!aiks_context->IsValid()) {
     return;
   }
@@ -114,10 +120,11 @@ std::unique_ptr<SurfaceFrame> GPUSurfaceVulkanImpeller::AcquireFrame(
         return false;
       }
 
-      // This surface owns its AiksContext, so no other surface encodes into
-      // its transient host buffers. Reset them after every frame, including
-      // frames that are not the last surface submitted (such as platform
-      // view overlays, which set frame_boundary to false).
+      // No other surface encodes into this surface's AiksContext (see the
+      // constructor's requirements), so nothing else uses its transient host
+      // buffers. Reset them after every frame, including frames that are not
+      // the last surface submitted (such as platform view overlays, which set
+      // frame_boundary to false).
       return impeller::RenderToTarget(aiks_context->GetContentContext(),  //
                                       render_target,                      //
                                       display_list,                       //

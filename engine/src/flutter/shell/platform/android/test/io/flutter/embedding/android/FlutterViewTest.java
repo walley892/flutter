@@ -115,6 +115,21 @@ public class FlutterViewTest {
   }
 
   @Test
+  public void attachToFlutterEngine_prewarmsRendering() {
+    FlutterView flutterView = new FlutterView(ctx);
+    FlutterEngine flutterEngine = spy(new FlutterEngine(ctx, mockFlutterLoader, mockFlutterJni));
+    FlutterRenderer flutterRenderer = spy(new FlutterRenderer(mockFlutterJni));
+    when(flutterEngine.getRenderer()).thenReturn(flutterRenderer);
+
+    flutterView.attachToFlutterEngine(flutterEngine);
+
+    // Attaching a view is the earliest signal that the engine will render, so it should start
+    // preparing GPU resources then rather than when the render surface is created.
+    verify(flutterRenderer, times(1)).prewarmRendering();
+    verify(mockFlutterJni, times(1)).prewarmRendering();
+  }
+
+  @Test
   public void flutterView_importantForAutofillDoesNotExcludeDescendants() {
     FlutterView flutterView = new FlutterView(ctx);
 

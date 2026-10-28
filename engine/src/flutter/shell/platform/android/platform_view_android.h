@@ -69,6 +69,15 @@ class PlatformViewAndroid final : public PlatformView {
 
   void NotifyChanged(const DlISize& size);
 
+  //----------------------------------------------------------------------------
+  /// @brief      Called on the platform thread when a view attaches to this
+  ///             engine, so that rendering resources (such as Impeller
+  ///             pipeline state objects) can be prepared before a surface
+  ///             exists. Engines that never attach to a view, such as
+  ///             headless engines, never pay for it. Safe to call repeatedly.
+  ///
+  void PrewarmRendering();
+
   // |PlatformView|
   void NotifyDestroyed() override;
 

@@ -10,8 +10,10 @@
 #include "flutter/fml/concurrent_message_loop.h"
 #include "flutter/fml/logging.h"
 #include "flutter/fml/memory/ref_ptr.h"
+#include "flutter/fml/trace_event.h"
 #include "flutter/impeller/renderer/backend/vulkan/context_vk.h"
 #include "flutter/impeller/renderer/backend/vulkan/swapchain/swapchain_vk.h"
+#include "flutter/impeller/typographer/backends/skia/typographer_context_skia.h"
 #include "flutter/shell/gpu/gpu_surface_vulkan_impeller.h"
 #include "flutter/vulkan/vulkan_native_surface_android.h"
 #include "impeller/renderer/backend/vulkan/swapchain/ahb/ahb_swapchain_vk.h"
@@ -48,14 +50,54 @@ std::unique_ptr<Surface> AndroidSurfaceVKImpeller::CreateGPUSurface(
     return nullptr;
   }
 
+  std::shared_ptr<impeller::AiksContext> aiks_context =
+      GetOrCreateAiksContext();
+  if (!aiks_context) {
+    return nullptr;
+  }
+
   std::unique_ptr<GPUSurfaceVulkanImpeller> gpu_surface =
-      std::make_unique<GPUSurfaceVulkanImpeller>(nullptr, surface_context_vk_);
+      std::make_unique<GPUSurfaceVulkanImpeller>(nullptr, surface_context_vk_,
+                                                 /*render_to_surface=*/true,
+                                                 aiks_context);
 
   if (!gpu_surface->IsValid()) {
     return nullptr;
   }
 
+  // Hand the AiksContext off: from now on the GPU surface owns it.
+  handed_off_aiks_context_ = aiks_context;
+  warm_aiks_context_.reset();
+
   return gpu_surface;
+}
+
+void AndroidSurfaceVKImpeller::PrewarmRendering() {
+  TRACE_EVENT0("flutter", "AndroidSurfaceVKImpeller::PrewarmRendering");
+  if (!IsValid() || warm_aiks_context_ || !handed_off_aiks_context_.expired()) {
+    return;
+  }
+  // Constructing the ContentContext queues compile jobs for its default
+  // pipelines on the context's worker threads. The pipeline library caches
+  // them by descriptor, so they also benefit any AiksContext created later.
+  warm_aiks_context_ = GetOrCreateAiksContext();
+}
+
+std::shared_ptr<impeller::AiksContext>
+AndroidSurfaceVKImpeller::GetOrCreateAiksContext() const {
+  if (warm_aiks_context_) {
+    return warm_aiks_context_;
+  }
+  if (std::shared_ptr<impeller::AiksContext> live =
+          handed_off_aiks_context_.lock()) {
+    return live;
+  }
+  auto aiks_context = std::make_shared<impeller::AiksContext>(
+      surface_context_vk_, impeller::TypographerContextSkia::Make());
+  if (!aiks_context->IsValid()) {
+    return nullptr;
+  }
+  return aiks_context;
 }
 
 bool AndroidSurfaceVKImpeller::OnScreenSurfaceResize(const DlISize& size) {

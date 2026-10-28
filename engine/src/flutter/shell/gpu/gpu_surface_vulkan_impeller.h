@@ -28,9 +28,19 @@ class GPUSurfaceVulkanImpeller final : public Surface {
   ///                            neither acquire nor present an image: the
   ///                            compositor presents the layers instead, and a
   ///                            root-surface present would overwrite them.
-  explicit GPUSurfaceVulkanImpeller(GPUSurfaceVulkanDelegate* delegate,
-                                    std::shared_ptr<impeller::Context> context,
-                                    bool render_to_surface = true);
+  /// @param  aiks_context       An AiksContext created for `context`, for
+  ///                            example one that was warmed up before this
+  ///                            surface existed. If null, the surface creates
+  ///                            its own. This surface resets the
+  ///                            AiksContext's transient host buffers after
+  ///                            every frame it encodes, so the AiksContext
+  ///                            must not be shared with another surface that
+  ///                            encodes frames at the same time.
+  explicit GPUSurfaceVulkanImpeller(
+      GPUSurfaceVulkanDelegate* delegate,
+      std::shared_ptr<impeller::Context> context,
+      bool render_to_surface = true,
+      std::shared_ptr<impeller::AiksContext> aiks_context = nullptr);
 
   // |Surface|
   ~GPUSurfaceVulkanImpeller() override;

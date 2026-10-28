@@ -58,6 +58,14 @@ void AndroidSurfaceDynamicImpeller::SetupImpellerSurface() {
   }
 }
 
+void AndroidSurfaceDynamicImpeller::PrewarmRendering() {
+  // Runs on the raster thread after |SetupImpellerSurface|, so the backend
+  // surface already exists. The OpenGL ES backend has nothing to prewarm.
+  if (vulkan_surface_) {
+    vulkan_surface_->PrewarmRendering();
+  }
+}
+
 bool AndroidSurfaceDynamicImpeller::OnScreenSurfaceResize(const DlISize& size) {
   if (vulkan_surface_) {
     return vulkan_surface_->OnScreenSurfaceResize(size);

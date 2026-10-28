@@ -691,6 +691,29 @@ public class FlutterJNI {
   private native void nativeSurfaceDestroyed(long nativeShellHolderId);
 
   /**
+   * Call this method when a view that will display this engine's UI attaches to the engine, before
+   * a {@link Surface} is available.
+   *
+   * <p>This lets the engine start preparing rendering resources, such as compiling the GPU pipeline
+   * state objects it needs for its first frames, instead of waiting until a {@link Surface} is
+   * created later in the {@link android.app.Activity} lifecycle. Engines that never attach to a
+   * view, such as headless engines, skip this work entirely.
+   *
+   * <p>This is a hint: it does nothing if this {@code FlutterJNI} is not attached to native, or if
+   * the rendering backend has nothing to prepare. It is safe to call more than once.
+   */
+  @UiThread
+  public void prewarmRendering() {
+    ensureRunningOnMainThread();
+    if (!isAttached()) {
+      return;
+    }
+    nativePrewarmRendering(nativeShellHolderId);
+  }
+
+  private native void nativePrewarmRendering(long nativeShellHolderId);
+
+  /**
    * Call this method to notify Flutter of the current device viewport metrics that are applies to
    * the Flutter UI that is being rendered.
    *

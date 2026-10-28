@@ -48,6 +48,16 @@ class AndroidSurface {
 
   virtual void SetupImpellerSurface();
 
+  /// @brief Prepares rendering resources ahead of the first
+  ///        |CreateGPUSurface| call, for example by starting to compile
+  ///        pipeline state objects, so that work overlaps startup instead of
+  ///        beginning once the window is attached.
+  ///
+  ///        Called on the raster thread, after |SetupImpellerSurface|, when a
+  ///        view attaches to the engine. Engines that never attach to a view
+  ///        never call it. Must be idempotent. Does nothing by default.
+  virtual void PrewarmRendering();
+
  protected:
   AndroidSurface();
 };

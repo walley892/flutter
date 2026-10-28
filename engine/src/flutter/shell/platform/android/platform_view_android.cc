@@ -247,6 +247,22 @@ void PlatformViewAndroid::NotifyChanged(const DlISize& size) {
   latch.Wait();
 }
 
+void PlatformViewAndroid::PrewarmRendering() {
+  if (!android_surface_) {
+    return;
+  }
+  // Always posted (never run inline) so that it is queued behind the Impeller
+  // context setup that |Shell::Create| posted to the raster thread. By the time
+  // it runs, the backend surface exists and the context has already been
+  // published to the rest of the engine, so the warm-up delays neither.
+  //
+  // The raw pointer is safe: the shell destroys the rasterizer on the raster
+  // thread, after this task has run, before it destroys this platform view and
+  // with it the surface.
+  task_runners_.GetRasterTaskRunner()->PostTask(
+      [surface = android_surface_.get()]() { surface->PrewarmRendering(); });
+}
+
 void PlatformViewAndroid::DispatchPlatformMessage(JNIEnv* env,
                                                   std::string name,
                                                   jobject java_message_data,

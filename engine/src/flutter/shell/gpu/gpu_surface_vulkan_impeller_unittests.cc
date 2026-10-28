@@ -18,6 +18,7 @@
 #include "impeller/renderer/backend/vulkan/swapchain/surface_vk.h"
 #include "impeller/renderer/backend/vulkan/swapchain/swapchain_vk.h"
 #include "impeller/renderer/backend/vulkan/texture_wrapper_vk.h"
+#include "impeller/typographer/backends/skia/typographer_context_skia.h"
 
 namespace flutter {
 namespace testing {
@@ -145,6 +146,36 @@ TEST(GPUSurfaceVulkanImpeller, PresentsWhenRenderingToSurface) {
   auto frame = surface->AcquireFrame(DlISize(100, 100));
   ASSERT_NE(frame, nullptr);
   EXPECT_GT(delegate.acquire_count(), 0);
+}
+
+/// A surface handed an AiksContext, such as one warmed up before the surface
+/// existed, must render with it instead of building its own. Otherwise the
+/// pipelines compiled during warm-up would not be the ones used for the first
+/// frame.
+TEST(GPUSurfaceVulkanImpeller, UsesProvidedAiksContext) {
+  impeller::ContextVK::Settings context_settings;
+  context_settings.proc_address_callback = vkGetInstanceProcAddr;
+  context_settings.shader_libraries_data = ShaderLibraryMappings();
+  std::shared_ptr<impeller::ContextVK> context =
+      impeller::ContextVK::Create(std::move(context_settings));
+  ASSERT_NE(context, nullptr);
+
+  auto aiks_context = std::make_shared<impeller::AiksContext>(
+      context, impeller::TypographerContextSkia::Make());
+  ASSERT_TRUE(aiks_context->IsValid());
+
+  TestGPUSurfaceVulkanDelegate delegate;
+  std::unique_ptr<Surface> surface = std::make_unique<GPUSurfaceVulkanImpeller>(
+      &delegate, context, /*render_to_surface=*/true, aiks_context);
+  ASSERT_TRUE(surface->IsValid());
+  EXPECT_EQ(surface->GetAiksContext(), aiks_context);
+
+  // Without one, the surface still creates its own.
+  std::unique_ptr<Surface> default_surface =
+      std::make_unique<GPUSurfaceVulkanImpeller>(&delegate, context);
+  ASSERT_TRUE(default_surface->IsValid());
+  ASSERT_NE(default_surface->GetAiksContext(), nullptr);
+  EXPECT_NE(default_surface->GetAiksContext(), aiks_context);
 }
 
 TEST(GPUSurfaceVulkanImpeller, RecreatesTransientsWhenFrameSizeChanges) {

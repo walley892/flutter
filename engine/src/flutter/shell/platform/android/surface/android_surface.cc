@@ -21,4 +21,6 @@ std::shared_ptr<impeller::Context> AndroidSurface::GetImpellerContext() {
 
 void AndroidSurface::SetupImpellerSurface() {}
 
+void AndroidSurface::PrewarmRendering() {}
+
 }  // namespace flutter

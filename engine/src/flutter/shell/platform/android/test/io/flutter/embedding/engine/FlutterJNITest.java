@@ -191,6 +191,17 @@ public class FlutterJNITest {
     assertFalse(flutterJNI.semanticsEnabled);
   }
 
+  @Test
+  public void prewarmRenderingDoesNothingIfNotAttached() {
+    // Prewarming is only a hint, so a detached FlutterJNI must ignore it rather than calling into
+    // native without a shell holder.
+    FlutterJNI flutterJNI = new FlutterJNI();
+
+    flutterJNI.prewarmRendering();
+
+    assertFalse(flutterJNI.isAttached());
+  }
+
   public void onDisplayPlatformView_callsPlatformViewsController() {
     PlatformViewsController platformViewsController = mock(PlatformViewsController.class);
 

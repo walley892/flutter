@@ -297,6 +297,10 @@ static void SurfaceDestroyed(JNIEnv* env, jobject jcaller, jlong shell_holder) {
   ANDROID_SHELL_HOLDER->GetPlatformView()->NotifyDestroyed();
 }
 
+static void PrewarmRendering(JNIEnv* env, jobject jcaller, jlong shell_holder) {
+  ANDROID_SHELL_HOLDER->GetPlatformView()->PrewarmRendering();
+}
+
 static void RunBundleAndSnapshotFromLibrary(JNIEnv* env,
                                             jobject jcaller,
                                             jlong shell_holder,
@@ -837,6 +841,11 @@ bool RegisterApi(JNIEnv* env) {
           .name = "nativeSurfaceDestroyed",
           .signature = "(J)V",
           .fnPtr = reinterpret_cast<void*>(&SurfaceDestroyed),
+      },
+      {
+          .name = "nativePrewarmRendering",
+          .signature = "(J)V",
+          .fnPtr = reinterpret_cast<void*>(&PrewarmRendering),
       },
       {
           .name = "nativeSetViewportMetrics",
