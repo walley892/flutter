@@ -27,6 +27,17 @@ GeometryResult UberSDFGeometry::GetPositionBuffer(
   return frg.GetPositionBuffer(renderer, entity, pass);
 }
 
+GeometryResult UberSDFGeometry::GetCenteredPositionBuffer(
+    const ContentContext& renderer,
+    const Entity& entity,
+    RenderPass& pass) const {
+  FillRectGeometry frg(
+      GetExpandedBounds(entity.GetTransform()).Shift(-params_.center));
+  GeometryResult result = frg.GetPositionBuffer(renderer, entity, pass);
+  result.transform = result.transform * Matrix::MakeTranslation(params_.center);
+  return result;
+}
+
 std::optional<Rect> UberSDFGeometry::GetCoverage(
     const Matrix& transform) const {
   return GetExpandedBounds(transform).TransformAndClipBounds(transform);

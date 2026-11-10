@@ -63,20 +63,23 @@ struct SamplerBinding {
 };
 
 /// @brief  Populates the gradient uniforms shared by both UberSDF variants.
+///
+///         The UberSDF shader works in coordinates relative to the shape's
+///         center, so gradient positions are made relative to `center`.
 template <typename FragInfo>
 void SetupCommonGradientParameters(
     const UberSDFParameters::GradientParameters& gradient,
+    Point center,
     FragInfo& frag_info) {
   frag_info.tile_mode = static_cast<Scalar>(gradient.tile_mode);
+  Point start = gradient.start - center;
   if (gradient.type == UberSDFParameters::GradientParameters::Type::kLinear) {
     Point delta = gradient.end - gradient.start;
     Scalar length_sq = delta.x * delta.x + delta.y * delta.y;
-    frag_info.gradient_coords =
-        Vector4(gradient.start.x, gradient.start.y, delta.x, delta.y);
+    frag_info.gradient_coords = Vector4(start.x, start.y, delta.x, delta.y);
     frag_info.inv_gradient_length = length_sq > 0.0f ? 1.0f / length_sq : 0.0f;
   } else {
-    frag_info.gradient_coords =
-        Vector4(gradient.start.x, gradient.start.y, 0.0f, 0.0f);
+    frag_info.gradient_coords = Vector4(start.x, start.y, 0.0f, 0.0f);
     frag_info.inv_gradient_length =
         gradient.end.x > 0.0f ? 1.0f / gradient.end.x : 0.0f;
   }
@@ -91,7 +94,6 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.type = ToShaderType(params.type);
   frag_info.color_source_type = ToShaderColorSourceType(params);
   frag_info.color = params.color.WithAlpha(params.color.alpha * opacity);
-  frag_info.center = params.center;
   frag_info.size = params.size;
   Vector2 pixel_size = entity.GetTransform().GetTransformedPixelSize();
   frag_info.pixel_size = Point(pixel_size.x, pixel_size.y);
@@ -113,21 +115,36 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.colors_length = 0.0f;
 
   if (params.gradient) {
-    SetupCommonGradientParameters(params.gradient.value(), frag_info);
+    SetupCommonGradientParameters(params.gradient.value(), params.center,
+                                  frag_info);
   }
+}
+
+/// @brief  Returns a `DrawGeometry` callback that creates the mesh for the
+///         UberSDF shader, which expects positions relative to the shape's
+///         center. See `UberSDFGeometry::GetCenteredPositionBuffer`.
+ColorSourceContents::CreateGeometryCallback MakeCenteredGeometryCallback(
+    const UberSDFGeometry* geometry) {
+  return [geometry](const ContentContext& renderer, const Entity& entity,
+                    RenderPass& pass, const Geometry* draw_geometry) {
+    // DrawGeometry only substitutes a different geometry for stencil-then-cover
+    // draws, which UberSDF geometry never uses.
+    FML_DCHECK(draw_geometry == geometry);
+    return geometry->GetCenteredPositionBuffer(renderer, entity, pass);
+  };
 }
 
 }  // namespace
 
 std::unique_ptr<UberSDFContents> UberSDFContents::Make(
     const UberSDFParameters& params,
-    std::unique_ptr<Geometry> geometry) {
+    std::unique_ptr<UberSDFGeometry> geometry) {
   return std::unique_ptr<UberSDFContents>(
       new UberSDFContents(params, std::move(geometry)));
 }
 
 UberSDFContents::UberSDFContents(const UberSDFParameters& params,
-                                 std::unique_ptr<Geometry> geometry)
+                                 std::unique_ptr<UberSDFGeometry> geometry)
     : params_(params), geometry_(std::move(geometry)) {}
 
 UberSDFContents::~UberSDFContents() = default;
@@ -187,7 +204,9 @@ bool UberSDFContents::RenderTexture(const ContentContext& renderer,
         FS::BindFragInfo(pass, data_host_buffer.EmplaceUniform(frag_info));
         pass.SetCommandLabel("UberSDF");
         return true;
-      });
+      },
+      /*force_stencil=*/false,
+      /*create_geom_callback=*/MakeCenteredGeometryCallback(geometry_.get()));
 }
 
 bool UberSDFContents::RenderSSBO(const ContentContext& renderer,
@@ -232,7 +251,9 @@ bool UberSDFContents::RenderSSBO(const ContentContext& renderer,
         FS::BindColorData(pass, color_buffer);
         pass.SetCommandLabel("UberSDFSSBO");
         return true;
-      });
+      },
+      /*force_stencil=*/false,
+      /*create_geom_callback=*/MakeCenteredGeometryCallback(geometry_.get()));
 }
 
 std::optional<Rect> UberSDFContents::GetCoverage(const Entity& entity) const {

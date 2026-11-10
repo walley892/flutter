@@ -12,6 +12,7 @@
 #include "flutter/impeller/entity/contents/contents.h"
 #include "impeller/entity/contents/uber_sdf_parameters.h"
 #include "impeller/entity/geometry/geometry.h"
+#include "impeller/entity/geometry/uber_sdf_geometry.h"
 #include "impeller/geometry/color.h"
 #include "impeller/geometry/rect.h"
 
@@ -21,7 +22,7 @@ class UberSDFContents : public ColorSourceContents {
  public:
   static std::unique_ptr<UberSDFContents> Make(
       const UberSDFParameters& params,
-      std::unique_ptr<Geometry> geometry);
+      std::unique_ptr<UberSDFGeometry> geometry);
 
   ~UberSDFContents() override;
 
@@ -42,7 +43,7 @@ class UberSDFContents : public ColorSourceContents {
 
  private:
   explicit UberSDFContents(const UberSDFParameters& params,
-                           std::unique_ptr<Geometry> geometry);
+                           std::unique_ptr<UberSDFGeometry> geometry);
 
   /// Renders using a pre-baked gradient ramp texture.
   bool RenderTexture(const ContentContext& renderer,
@@ -55,7 +56,7 @@ class UberSDFContents : public ColorSourceContents {
                   RenderPass& pass) const;
 
   UberSDFParameters params_;
-  std::unique_ptr<Geometry> geometry_;
+  std::unique_ptr<UberSDFGeometry> geometry_;
 
   UberSDFContents(const UberSDFContents&) = delete;
 

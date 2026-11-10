@@ -26,6 +26,21 @@ class UberSDFGeometry final : public Geometry {
                                    const Entity& entity,
                                    RenderPass& pass) const override;
 
+  /// Returns the same mesh as `GetPositionBuffer`, but with vertices relative
+  /// to the shape's center, and the translation to the center folded into the
+  /// returned transform.
+  ///
+  /// The UberSDF shader works in coordinates relative to the shape's center.
+  /// Interpolating center-relative positions avoids subtracting the center (a
+  /// potentially large local coordinate) per fragment, which loses precision.
+  ///
+  /// Only the UberSDF shader expects these positions. Other contents drawing
+  /// this geometry (e.g. for color sources that UberSDF can't render) use
+  /// `GetPositionBuffer`.
+  GeometryResult GetCenteredPositionBuffer(const ContentContext& renderer,
+                                           const Entity& entity,
+                                           RenderPass& pass) const;
+
   // |Geometry|
   std::optional<Rect> GetCoverage(const Matrix& transform) const override;
 

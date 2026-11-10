@@ -44,10 +44,12 @@ uniform FragInfo {
   vec4 radii;
   /// Gradient parameters:
   ///   - Linear gradient:
-  ///       xy: Start point in local coordinates.
+  ///       xy: Start point in local coordinates, relative to the shape's
+  ///           center.
   ///       zw: Delta vector (end - start) in local coordinates.
   ///   - Radial gradient:
-  ///       xy: Center point in local coordinates.
+  ///       xy: Center point in local coordinates, relative to the shape's
+  ///           center.
   ///       zw: Unused (0.0).
   highp vec4 gradient_coords;
 
@@ -56,8 +58,6 @@ uniform FragInfo {
   // ===========================================================================
 
   // --- General Shape Geometry ---
-  /// The center position of the shape in local coordinates.
-  highp vec2 center;
   /// The half-dimensions of the shape (half-width, half-height).
   highp vec2 size;
   /// The size of a device pixel in local coordinates.
@@ -134,6 +134,10 @@ frag_info;
 
 out vec4 frag_color;
 
+// The fragment position in local coordinates, relative to the shape's center.
+// `UberSDFGeometry::GetCenteredPositionBuffer` folds the translation to the
+// center into the vertex transform, so this is interpolated directly in
+// center-relative coordinates.
 highp in vec2 v_position;
 
 // Looks up the gradient color at gradient position `t`.
@@ -413,7 +417,7 @@ float gammaCorrectedAlpha(float alpha, vec3 foreground_rgb) {
 void main() {
   vec4 color = getColor();
 
-  highp vec2 p = v_position - frag_info.center;
+  highp vec2 p = v_position;
 
   vec2 sdf_and_pixel_size =
       (frag_info.stroked < 0.5) ? filledSDF(p) : strokedSDF(p);

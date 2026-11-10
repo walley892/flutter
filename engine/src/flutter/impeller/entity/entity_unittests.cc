@@ -1288,6 +1288,46 @@ TEST(EntityTest, UberSDFContentsCoverageStrokeCircle) {
                        .Expand(3.0f));  // expanded by half stroke width + AA
 }
 
+TEST_P(EntityTest, UberSDFGeometryCenteredPositionBufferIsRelativeToCenter) {
+  auto params = UberSDFParameters::MakeRect(
+      Color::Red(), Rect::MakeLTRB(1000, 2000, 1100, 2050),
+      /*stroke=*/std::nullopt);
+  UberSDFGeometry geometry(params);
+
+  ContentContext content_context(GetContext(), /*typographer_context=*/nullptr);
+  Entity entity;
+  entity.SetTransform(Matrix::MakeScale({2.0f, 2.0f, 1.0f}));
+
+  auto cmd_buffer = content_context.GetContext()->CreateCommandBuffer();
+  RenderTargetAllocator allocator(
+      content_context.GetContext()->GetResourceAllocator());
+  auto render_target = allocator.CreateOffscreen(
+      *content_context.GetContext(), /*size=*/{500, 500}, /*mip_count=*/1);
+  auto pass = cmd_buffer->CreateRenderPass(render_target);
+
+  GeometryResult result =
+      geometry.GetPositionBuffer(content_context, entity, *pass);
+  GeometryResult centered =
+      geometry.GetCenteredPositionBuffer(content_context, entity, *pass);
+
+  ASSERT_EQ(result.vertex_buffer.vertex_count, 4u);
+  ASSERT_EQ(centered.vertex_buffer.vertex_count, 4u);
+  const Point* points = reinterpret_cast<const Point*>(
+      result.vertex_buffer.vertex_buffer.GetBuffer()->OnGetContents() +
+      result.vertex_buffer.vertex_buffer.GetRange().offset);
+  const Point* centered_points = reinterpret_cast<const Point*>(
+      centered.vertex_buffer.vertex_buffer.GetBuffer()->OnGetContents() +
+      centered.vertex_buffer.vertex_buffer.GetRange().offset);
+
+  for (size_t i = 0; i < 4u; i++) {
+    // The centered vertices are relative to the shape's center...
+    EXPECT_POINT_NEAR(centered_points[i], points[i] - params.center);
+    // ...and the centered transform maps them to the same positions.
+    EXPECT_POINT_NEAR(centered.transform * centered_points[i],
+                      result.transform * points[i]);
+  }
+}
+
 TEST_P(EntityTest, SolidStrokeCoverageIsCorrect) {
   {
     auto geometry = Geometry::MakeStrokePath(
