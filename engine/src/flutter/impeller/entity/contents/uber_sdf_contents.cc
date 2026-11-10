@@ -99,7 +99,6 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.stroke_width = params.stroke ? params.stroke->width : 0.0f;
   frag_info.stroke_join =
       params.stroke ? ToShaderStrokeJoin(params.stroke->join) : 0.0f;
-  frag_info.aa_pixels = UberSDFParameters::kAntialiasPixels;
   frag_info.superellipse_degree = params.superellipse_degree;
   frag_info.angle_span = params.angle_span;
   frag_info.circle_center_top = params.circle_center_top;

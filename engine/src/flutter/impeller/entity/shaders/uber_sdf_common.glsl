@@ -16,6 +16,12 @@ precision mediump float;
 #include "sdf_functions.glsl"
 #include "sdf_utils.glsl"
 
+/// The width in device pixels over which to apply antialiasing.
+///
+/// Must match `UberSDFParameters::kAntialiasPixels`, which pads the drawn
+/// geometry to make room for it.
+const float kAntialiasPixels = 1.0;
+
 uniform FragInfo {
   // FragInfo fields are sorted by size (vec4 -> vec2 -> float) to optimize
   // uniform register usage.
@@ -87,8 +93,6 @@ uniform FragInfo {
   ///   1: Linear gradient
   ///   2: Radial gradient
   float color_source_type;
-  /// The width in device pixels over which to apply antialiasing.
-  float aa_pixels;
 
   // --- Stroke Parameters ---
   /// Whether the shape is stroked (1.0) or filled (0.0).
@@ -416,7 +420,7 @@ void main() {
   float sdf = sdf_and_pixel_size.x;
   float pixel_size = sdf_and_pixel_size.y;
 
-  float alpha = SDFAlpha(sdf, pixel_size, frag_info.aa_pixels);
+  float alpha = SDFAlpha(sdf, pixel_size, kAntialiasPixels);
   // Clamp alpha in case floating point precision errors cause it to be outside
   // [0.0, 1.0].
   alpha = clamp(alpha, 0.0, 1.0);
