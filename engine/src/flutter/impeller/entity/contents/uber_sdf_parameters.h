@@ -130,7 +130,8 @@ struct UberSDFParameters {
 
   /// The angular span of the circular cap for the top and right octants.
   ///
-  /// The shader receives the cosines of these angles.
+  /// The shader receives the cosines of these angles in the otherwise unused
+  /// `radii.zw` uniform components.
   Point angle_span;
 
   /// The circular cap center for the top octant of each

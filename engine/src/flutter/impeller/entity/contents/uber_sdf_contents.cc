@@ -116,11 +116,15 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.stroke_join =
       params.stroke ? ToShaderStrokeJoin(params.stroke->join) : 0.0f;
   frag_info.superellipse_degree = params.superellipse_degree;
-  frag_info.cos_angle_span =
-      Point(std::cos(params.angle_span.x), std::cos(params.angle_span.y));
   frag_info.circle_center_top = params.circle_center_top;
   frag_info.circle_center_right = params.circle_center_right;
   frag_info.radii = params.radii;
+  if (params.type == UberSDFParameters::Type::kRoundedSuperellipseSymmetric) {
+    // Rounded superellipses only use radii.xy, so the shader takes the cosines
+    // of the angular spans in radii.zw.
+    frag_info.radii.z = std::cos(params.angle_span.x);
+    frag_info.radii.w = std::cos(params.angle_span.y);
+  }
 
   // Gradient parameter defaults; overwritten by each variant as needed.
   frag_info.half_texel = 0.0f;
