@@ -9,7 +9,6 @@ precision mediump float;
 
 #include <impeller/color.glsl>
 #include <impeller/constants.glsl>
-#include <impeller/gradient.glsl>
 #include <impeller/texture.glsl>
 #include <impeller/types.glsl>
 
@@ -127,6 +126,26 @@ out vec4 frag_color;
 
 highp in vec2 v_position;
 
+// The shape distance math below runs in normalized shape space: local
+// coordinates relative to the shape's center, divided by the shape's extent
+// (see `inverseShapeScale`). Values in this space stay around 1, so mediump
+// intermediate values like squared lengths can't overflow (fp16 tops out at
+// 65504, i.e. the square of ~256). Sizes, stroke widths, and pixel sizes are
+// converted into the same space, so the antialiasing math is unchanged.
+
+// Returns the factor that converts local lengths into normalized shape space.
+//
+// The extent covers the shape's larger half-dimension plus the stroke and
+// antialiasing padding that the geometry adds, so that every fragment's
+// normalized position stays around 1. Extents below 1 local unit can't
+// overflow, so they aren't scaled up.
+float inverseShapeScale() {
+  float extent = max(frag_info.size.x, frag_info.size.y) +
+                 frag_info.stroke_width * 0.5 +
+                 max(frag_info.pixel_size.x, frag_info.pixel_size.y);
+  return 1.0 / max(extent, 1.0);
+}
+
 // Looks up the gradient color at gradient position `t`.
 //
 // `t` is untiled, so implementations apply frag_info.tile_mode themselves.
@@ -143,14 +162,27 @@ vec4 getColor() {
   } else {
     float t;
     if (frag_info.color_source_type < 1.5) {
-      // Linear gradient
-      t = IPComputeLinearGradientT(v_position, frag_info.gradient_coords.xy,
-                                   frag_info.gradient_coords.zw,
-                                   frag_info.inv_gradient_length);
+      // Linear gradient: t = dot(start_to_position, delta) / dot(delta, delta).
+      // Both vectors are first scaled by 1 / max(|delta.x|, |delta.y|), which
+      // keeps the dot products small enough for mediump.
+      vec2 delta = frag_info.gradient_coords.zw;
+      float scale = 1.0 / max(max(abs(delta.x), abs(delta.y)), 1.0);
+      vec2 scaled_delta = delta * scale;
+      float scaled_length_squared = dot(scaled_delta, scaled_delta);
+      // Evaluated at the precision of the highp v_position until it's scaled.
+      vec2 scaled_start_to_position =
+          (v_position - frag_info.gradient_coords.xy) * scale;
+      t = scaled_length_squared > 0.0
+              ? dot(scaled_start_to_position, scaled_delta) /
+                    scaled_length_squared
+              : 0.0;
     } else {
-      // Radial gradient
-      t = IPComputeRadialGradientT(v_position, frag_info.gradient_coords.xy,
-                                   frag_info.inv_gradient_length);
+      // Radial gradient: inv_gradient_length is 1 / radius. Scaling before
+      // taking the length keeps the squared length near t^2.
+      vec2 scaled_center_to_position =
+          (v_position - frag_info.gradient_coords.xy) *
+          frag_info.inv_gradient_length;
+      t = length(scaled_center_to_position);
     }
     vec4 gradient_color = getGradientColor(t);
     color = vec4(gradient_color.rgb, gradient_color.a * frag_info.color.a);
@@ -242,33 +274,39 @@ float distanceFromRoundedSuperellipse(vec2 p,
 }
 
 // Calculates pixel size for rectangles using frag_info.pixel_size.
-float rectPixelSize(vec2 p) {
+//
+// `p` and `size` are in normalized shape space, and so is the result.
+float rectPixelSize(vec2 p, vec2 size, float inv_scale) {
   // Get pixel size in the direction perpendicular to the closest edge of the
   // rectangle: frag_info.pixel_size.x when closer to a vertical edge, and
   // frag_info.pixel_size.y when closer to a horizontal edge.
-  vec2 distance = abs(abs(p) - frag_info.size);
-  return (distance.x < distance.y) ? frag_info.pixel_size.x
-                                   : frag_info.pixel_size.y;
+  vec2 distance = abs(abs(p) - size);
+  return ((distance.x < distance.y) ? frag_info.pixel_size.x
+                                    : frag_info.pixel_size.y) *
+         inv_scale;
 }
 
 // Special case pixel size calculation for rounded rectangles, similar to
 // `rectPixelSize` for regular rectangles.
-float roundRectPixelSize(vec2 p) {
+//
+// `p`, `size`, and `radii` are in normalized shape space, and so is the result.
+float roundRectPixelSize(vec2 p, vec2 size, vec4 radii, float inv_scale) {
   // The change in local coordinates per horizontal device pixel (device_dx)
   // and vertical device pixel (device_dy).
   vec2 device_dx = dFdx(v_position);
   vec2 device_dy = dFdy(v_position);
-  // The size of a device pixel in terms of local coordinates.
+  // The size of a device pixel in normalized shape space.
   vec2 device_pixel_size = vec2(length(vec2(device_dx.x, device_dy.x)),
-                                length(vec2(device_dx.y, device_dy.y)));
+                                length(vec2(device_dx.y, device_dy.y))) *
+                           inv_scale;
 
   // Select the corner radius for the quadrant of p.
-  vec4 r = frag_info.radii;
+  vec4 r = radii;
   r.xy = (p.x > 0.0) ? r.xy : r.zw;
   float radius = (p.y > 0.0) ? r.x : r.y;
 
   // Vector from corner circle center to abs(p).
-  vec2 corner_center = frag_info.size - radius;
+  vec2 corner_center = size - radius;
   vec2 q = abs(p) - corner_center;
 
   float pixel_size;
@@ -289,60 +327,67 @@ float pixelSize(float sdf) {
 }
 
 // Evaluates the SDF for the shape selected by frag_info.type.
-// Returns vec2(sdf, pixel_size).
-vec2 filledSDF(vec2 p) {
+//
+// `p` and the returned vec2(sdf, pixel_size) are in normalized shape space.
+// `inv_scale` converts local lengths into that space.
+vec2 filledSDF(vec2 p, float inv_scale) {
+  vec2 size = frag_info.size * inv_scale;
   float sdf;
   float pixel_size;
   if (frag_info.type < 0.5) {  // Circle
-    sdf = distanceFromCircle(p, frag_info.size.x);
+    sdf = distanceFromCircle(p, size.x);
     pixel_size = pixelSize(sdf);
   } else if (frag_info.type < 1.5) {  // Rect
-    sdf = distanceFromRect(p, frag_info.size);
+    sdf = distanceFromRect(p, size);
     // Rect has its own separate logic for calculating pixel size.
-    pixel_size = rectPixelSize(p);
+    pixel_size = rectPixelSize(p, size, inv_scale);
   } else if (frag_info.type < 2.5) {  // Oval
-    sdf = distanceFromOval(p, frag_info.size);
+    sdf = distanceFromOval(p, size);
     pixel_size = pixelSize(sdf);
   } else if (frag_info.type < 3.5) {  // Rounded Rect
-    sdf = distanceFromRoundedRect(p, frag_info.size, frag_info.radii);
+    vec4 radii = frag_info.radii * inv_scale;
+    sdf = distanceFromRoundedRect(p, size, radii);
     // RoundRect has its own separate logic for calculating pixel size.
-    pixel_size = roundRectPixelSize(p);
+    pixel_size = roundRectPixelSize(p, size, radii, inv_scale);
   } else {  // Symmetric Rounded Superellipse
     sdf = distanceFromRoundedSuperellipse(
-        p, frag_info.superellipse_degree, frag_info.size, frag_info.radii.xy,
-        frag_info.angle_span, frag_info.circle_center_top,
-        frag_info.circle_center_right);
+        p, frag_info.superellipse_degree, size, frag_info.radii.xy * inv_scale,
+        frag_info.angle_span, frag_info.circle_center_top * inv_scale,
+        frag_info.circle_center_right * inv_scale);
     pixel_size = pixelSize(sdf);
   }
   return vec2(sdf, pixel_size);
 }
 
 // Evaluates the stroked SDF for the shape selected by frag_info.type.
-// Returns vec2(sdf, pixel_size).
-vec2 strokedSDF(vec2 p) {
-  vec2 base_sdf_and_pixel_size = filledSDF(p);
+//
+// `p` and the returned vec2(sdf, pixel_size) are in normalized shape space.
+// `inv_scale` converts local lengths into that space.
+vec2 strokedSDF(vec2 p, float inv_scale) {
+  vec2 base_sdf_and_pixel_size = filledSDF(p, inv_scale);
   float base_sdf = base_sdf_and_pixel_size.x;
   float pixel_size = base_sdf_and_pixel_size.y;
 
-  float half_stroke = max(frag_info.stroke_width, pixel_size) * 0.5;
+  vec2 size = frag_info.size * inv_scale;
+  float stroke_width = frag_info.stroke_width * inv_scale;
+  float half_stroke = max(stroke_width, pixel_size) * 0.5;
 
   float sdf;
   if (frag_info.type >= 0.5 && frag_info.type < 1.5 &&
       frag_info.stroke_join < 0.5) {
     // Rect with Miter join
-    float outer = distanceFromRect(p, frag_info.size + half_stroke);
+    float outer = distanceFromRect(p, size + half_stroke);
     float inner = base_sdf + half_stroke;
     sdf = max(outer, -inner);
   } else if (frag_info.type >= 0.5 && frag_info.type < 1.5 &&
              frag_info.stroke_join >= 0.5 && frag_info.stroke_join < 1.5) {
     // Rect with Bevel join
-    float outer =
-        distanceFromChamferRect(p, frag_info.size + half_stroke, half_stroke);
+    float outer = distanceFromChamferRect(p, size + half_stroke, half_stroke);
     float inner = base_sdf + half_stroke;
     sdf = max(outer, -inner);
   } else {
     // All other shapes
-    sdf = SDFStroke(base_sdf, pixel_size, frag_info.stroke_width).x;
+    sdf = SDFStroke(base_sdf, pixel_size, stroke_width).x;
   }
   return vec2(sdf, pixel_size);
 }
@@ -366,10 +411,15 @@ float gammaCorrectedAlpha(float alpha, vec3 foreground_rgb) {
 void main() {
   vec4 color = getColor();
 
-  vec2 p = v_position - frag_info.center;
+  float inv_scale = inverseShapeScale();
+  // Evaluated at the precision of the highp v_position until it's scaled.
+  vec2 p = (v_position - frag_info.center) * inv_scale;
 
-  vec2 sdf_and_pixel_size =
-      (frag_info.stroked < 0.5) ? filledSDF(p) : strokedSDF(p);
+  // The sdf and pixel size are both in normalized shape space, so their ratio
+  // (which determines alpha) is the same as in local space.
+  vec2 sdf_and_pixel_size = (frag_info.stroked < 0.5)
+                                ? filledSDF(p, inv_scale)
+                                : strokedSDF(p, inv_scale);
   float sdf = sdf_and_pixel_size.x;
   float pixel_size = sdf_and_pixel_size.y;
 
