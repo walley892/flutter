@@ -343,17 +343,19 @@ float pixelSize(float sdf) {
 vec2 filledSDF(highp vec2 p) {
   float sdf;
   float pixel_size;
-  if (frag_info.type < 0.5) {  // Circle
+  // frag_info.type holds an exact small integer.
+  int type = int(frag_info.type);
+  if (type == 0) {  // Circle
     sdf = distanceFromCircle(p, frag_info.size.x);
     pixel_size = pixelSize(sdf);
-  } else if (frag_info.type < 1.5) {  // Rect
+  } else if (type == 1) {  // Rect
     sdf = distanceFromRect(p, frag_info.size);
     // Rect has its own separate logic for calculating pixel size.
     pixel_size = rectPixelSize(p);
-  } else if (frag_info.type < 2.5) {  // Oval
+  } else if (type == 2) {  // Oval
     sdf = distanceFromOval(p, frag_info.size);
     pixel_size = pixelSize(sdf);
-  } else if (frag_info.type < 3.5) {  // Rounded Rect
+  } else if (type == 3) {  // Rounded Rect
     sdf = distanceFromRoundedRect(p, frag_info.size, frag_info.radii);
     // RoundRect has its own separate logic for calculating pixel size.
     pixel_size = roundRectPixelSize(p);
@@ -377,14 +379,15 @@ vec2 strokedSDF(highp vec2 p) {
   float half_stroke = max(frag_info.stroke_width, pixel_size) * 0.5;
 
   float sdf;
-  if (frag_info.type >= 0.5 && frag_info.type < 1.5 &&
-      frag_info.stroke_join < 0.5) {
+  // frag_info.type and frag_info.stroke_join hold exact small integers.
+  int type = int(frag_info.type);
+  int join = int(frag_info.stroke_join);
+  if (type == 1 && join == 0) {
     // Rect with Miter join
     float outer = distanceFromRect(p, frag_info.size + half_stroke);
     float inner = base_sdf + half_stroke;
     sdf = max(outer, -inner);
-  } else if (frag_info.type >= 0.5 && frag_info.type < 1.5 &&
-             frag_info.stroke_join >= 0.5 && frag_info.stroke_join < 1.5) {
+  } else if (type == 1 && join == 1) {
     // Rect with Bevel join
     float outer =
         distanceFromChamferRect(p, frag_info.size + half_stroke, half_stroke);
