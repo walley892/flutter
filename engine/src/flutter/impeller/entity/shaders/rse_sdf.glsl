@@ -5,6 +5,8 @@
 #ifndef RSE_SDF_GLSL_
 #define RSE_SDF_GLSL_
 
+#include <impeller/constants.glsl>
+
 #include "sdf_functions.glsl"
 #include "sdf_utils.glsl"
 
@@ -28,16 +30,33 @@ bool useCircularDistance(vec2 p, float radius, float span) {
   return false;
 }
 
-float distanceFromRSEOctant(vec2 p_oct,
-                            vec2 circle_center,
-                            float radius,
-                            float span,
-                            float axis_length,
-                            float se_degree) {
-  // Move the point to the corner circle's coordinate system.
-  vec2 p_rel = p_oct - circle_center;
+// Equivalent to `useCircularDistance`, but takes the cosine of the span.
+//
+// `p` is within the span of the corner circle's arc when the angle between `p`
+// and the 45 degree midline is less than the span, i.e. when
+// cos(angle) > cos(span). This avoids atan() and mod(), and works directly on
+// an unnormalized highp `p`.
+bool useCircularDistanceCos(highp vec2 p, float cos_span) {
+  return dot(p, vec2(kHalfSqrtTwo)) > cos_span * length(p);
+}
 
-  if (useCircularDistance(p_rel, radius, span)) {
+// Signed distance from `p_oct` to one octant of a rounded superellipse, in
+// the octant's coordinate system.
+//
+// `cos_span` is the cosine of the angular span of the corner circle's arc.
+//
+// All positions and lengths are highp: near the edge, the distance is a small
+// difference of values at the scale of the shape.
+highp float distanceFromRSEOctantCos(highp vec2 p_oct,
+                                     highp vec2 circle_center,
+                                     highp float radius,
+                                     float cos_span,
+                                     highp float axis_length,
+                                     float se_degree) {
+  // Move the point to the corner circle's coordinate system.
+  highp vec2 p_rel = p_oct - circle_center;
+
+  if (useCircularDistanceCos(p_rel, cos_span)) {
     return length(p_rel) - radius;
   }
   return sdSuperellipse(p_oct / axis_length, se_degree) * axis_length;

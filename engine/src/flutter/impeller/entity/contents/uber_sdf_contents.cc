@@ -4,6 +4,8 @@
 
 #include "impeller/entity/contents/uber_sdf_contents.h"
 
+#include <cmath>
+
 #include "flutter/fml/logging.h"
 #include "impeller/entity/contents/color_source_contents.h"
 #include "impeller/entity/contents/content_context.h"
@@ -62,23 +64,38 @@ struct SamplerBinding {
   raw_ptr<const Sampler> sampler;
 };
 
-/// @brief  Populates the gradient uniforms shared by both UberSDF variants.
-template <typename FragInfo>
-void SetupCommonGradientParameters(
-    const UberSDFParameters::GradientParameters& gradient,
-    FragInfo& frag_info) {
-  frag_info.tile_mode = static_cast<Scalar>(gradient.tile_mode);
+/// @brief  Populates the vertex shader uniforms shared by both UberSDF
+///         variants, except for `mvp`, which `DrawGeometry` sets.
+///
+///         The vertex shader computes the center-relative position and the
+///         position in gradient space in highp, so the fragment shader does
+///         not have to subtract large local coordinates at lower precision.
+template <typename FrameInfo>
+void SetupFrameInfo(const UberSDFParameters& params, FrameInfo& frame_info) {
+  frame_info.center = params.center;
+  frame_info.gradient_matrix = Vector4();
+  frame_info.gradient_origin = Point();
+  if (!params.gradient.has_value()) {
+    return;
+  }
+  const UberSDFParameters::GradientParameters& gradient =
+      params.gradient.value();
+  frame_info.gradient_origin = gradient.start;
   if (gradient.type == UberSDFParameters::GradientParameters::Type::kLinear) {
+    // t = dot(position - start, delta) / dot(delta, delta).
     Point delta = gradient.end - gradient.start;
     Scalar length_sq = delta.x * delta.x + delta.y * delta.y;
-    frag_info.gradient_coords =
-        Vector4(gradient.start.x, gradient.start.y, delta.x, delta.y);
-    frag_info.inv_gradient_length = length_sq > 0.0f ? 1.0f / length_sq : 0.0f;
+    if (length_sq > 0.0f) {
+      frame_info.gradient_matrix =
+          Vector4(delta.x / length_sq, delta.y / length_sq, 0.0f, 0.0f);
+    }
   } else {
-    frag_info.gradient_coords =
-        Vector4(gradient.start.x, gradient.start.y, 0.0f, 0.0f);
-    frag_info.inv_gradient_length =
-        gradient.end.x > 0.0f ? 1.0f / gradient.end.x : 0.0f;
+    // t = length(position - center) / radius. The radius is in end.x.
+    Scalar radius = gradient.end.x;
+    if (radius > 0.0f) {
+      Scalar inv_radius = 1.0f / radius;
+      frame_info.gradient_matrix = Vector4(inv_radius, 0.0f, 0.0f, inv_radius);
+    }
   }
 }
 
@@ -91,7 +108,6 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.type = ToShaderType(params.type);
   frag_info.color_source_type = ToShaderColorSourceType(params);
   frag_info.color = params.color.WithAlpha(params.color.alpha * opacity);
-  frag_info.center = params.center;
   frag_info.size = params.size;
   Vector2 pixel_size = entity.GetTransform().GetTransformedPixelSize();
   frag_info.pixel_size = Point(pixel_size.x, pixel_size.y);
@@ -99,23 +115,18 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.stroke_width = params.stroke ? params.stroke->width : 0.0f;
   frag_info.stroke_join =
       params.stroke ? ToShaderStrokeJoin(params.stroke->join) : 0.0f;
-  frag_info.aa_pixels = UberSDFParameters::kAntialiasPixels;
   frag_info.superellipse_degree = params.superellipse_degree;
-  frag_info.angle_span = params.angle_span;
+  frag_info.cos_angle_span =
+      Point(std::cos(params.angle_span.x), std::cos(params.angle_span.y));
   frag_info.circle_center_top = params.circle_center_top;
   frag_info.circle_center_right = params.circle_center_right;
   frag_info.radii = params.radii;
 
-  // Gradient parameter defaults; overwritten if there is a gradient.
-  frag_info.gradient_coords = Vector4();
+  // Gradient parameter defaults; overwritten by each variant as needed.
   frag_info.half_texel = 0.0f;
-  frag_info.tile_mode = 0.0f;
-  frag_info.inv_gradient_length = 0.0f;
   frag_info.colors_length = 0.0f;
-
-  if (params.gradient) {
-    SetupCommonGradientParameters(params.gradient.value(), frag_info);
-  }
+  frag_info.tile_mode =
+      params.gradient ? static_cast<Scalar>(params.gradient->tile_mode) : 0.0f;
 }
 
 }  // namespace
@@ -153,6 +164,7 @@ bool UberSDFContents::RenderTexture(const ContentContext& renderer,
   VS::FrameInfo frame_info;
   FS::FragInfo frag_info;
   SetupCommonFragInfo(params_, GetOpacityFactor(), entity, frag_info);
+  SetupFrameInfo(params_, frame_info);
 
   SamplerBinding sampler_binding;
   if (params_.gradient) {
@@ -202,6 +214,7 @@ bool UberSDFContents::RenderSSBO(const ContentContext& renderer,
   VS::FrameInfo frame_info;
   FS::FragInfo frag_info;
   SetupCommonFragInfo(params_, GetOpacityFactor(), entity, frag_info);
+  SetupFrameInfo(params_, frame_info);
 
   std::vector<StopData> color_stops;
   if (params_.gradient) {
