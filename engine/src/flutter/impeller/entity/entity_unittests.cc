@@ -1294,7 +1294,7 @@ TEST_P(EntityTest, UberSDFGeometryCenteredPositionBufferIsRelativeToCenter) {
       /*stroke=*/std::nullopt);
   UberSDFGeometry geometry(params);
 
-  ContentContext content_context(GetContext(), /*typographer_context=*/nullptr);
+  ContentContext& content_context = GetContentContext();
   Entity entity;
   entity.SetTransform(Matrix::MakeScale({2.0f, 2.0f, 1.0f}));
 

@@ -4,6 +4,8 @@
 
 #include "impeller/entity/contents/uber_sdf_contents.h"
 
+#include <cmath>
+
 #include "flutter/fml/logging.h"
 #include "impeller/entity/contents/color_source_contents.h"
 #include "impeller/entity/contents/content_context.h"
@@ -102,10 +104,15 @@ void SetupCommonFragInfo(const UberSDFParameters& params,
   frag_info.stroke_join =
       params.stroke ? ToShaderStrokeJoin(params.stroke->join) : 0.0f;
   frag_info.superellipse_degree = params.superellipse_degree;
-  frag_info.angle_span = params.angle_span;
   frag_info.circle_center_top = params.circle_center_top;
   frag_info.circle_center_right = params.circle_center_right;
   frag_info.radii = params.radii;
+  if (params.type == UberSDFParameters::Type::kRoundedSuperellipseSymmetric) {
+    // Rounded superellipses only use radii.xy, so radii.zw carries the cosines
+    // of the circular caps' angular spans, which is what the shader uses.
+    frag_info.radii.z = std::cos(params.angle_span.x);
+    frag_info.radii.w = std::cos(params.angle_span.y);
+  }
 
   // Gradient parameter defaults; overwritten if there is a gradient.
   frag_info.gradient_coords = Vector4();

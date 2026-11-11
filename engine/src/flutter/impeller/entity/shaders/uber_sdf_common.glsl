@@ -39,8 +39,12 @@ uniform FragInfo {
   /// The RGBA color of the shape (or paint opacity in color.a for gradients).
   vec4 color;
   /// Corner radii for rounded rects (top-left, top-right, bottom-left,
-  /// bottom-right), or the circular cap radii for rounded superellipses in
-  /// radii.xy (top octant in x, right octant in y).
+  /// bottom-right).
+  ///
+  /// For rounded superellipses:
+  ///   xy: The circular cap radii (top octant in x, right octant in y).
+  ///   zw: The cosines of the circular caps' angular spans (top octant in z,
+  ///       right octant in w).
   vec4 radii;
   /// Gradient parameters:
   ///   - Linear gradient:
@@ -66,9 +70,6 @@ uniform FragInfo {
   // --- Superellipse Parameters ---
   /// The exponent degree (n_x, n_y) of the superellipse curvature.
   vec2 superellipse_degree;
-  /// The angular span of the corner circular arc transitions for rounded
-  /// superellipses.
-  vec2 angle_span;
   /// The center of the corner transition circle for the top octant of a
   /// rounded superellipse.
   vec2 circle_center_top;
@@ -357,11 +358,9 @@ vec2 filledSDF(highp vec2 p) {
     // RoundRect has its own separate logic for calculating pixel size.
     pixel_size = roundRectPixelSize(p);
   } else {  // Symmetric Rounded Superellipse
-    // cos(angle_span) only depends on uniforms, so it is evaluated once per
-    // draw rather than per fragment.
     sdf = distanceFromRoundedSuperellipse(
         p, frag_info.superellipse_degree, frag_info.size, frag_info.radii.xy,
-        cos(frag_info.angle_span), frag_info.circle_center_top,
+        frag_info.radii.zw, frag_info.circle_center_top,
         frag_info.circle_center_right);
     pixel_size = pixelSize(sdf);
   }
